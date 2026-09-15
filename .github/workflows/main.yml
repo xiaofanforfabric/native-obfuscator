@@ -1,5 +1,12 @@
 name: Main pipeline
-on: [push]
+on:
+  push:
+    branches:
+      - '**'
+    # 标签由 release.yml 处理,这里不要再触发(否则推标签会跑整套测试矩阵)
+    tags-ignore:
+      - '**'
+  pull_request:
 jobs:
   build:
     strategy:

@@ -1,0 +1,271 @@
+# ============================================================================
+#  发布工作流 / Release workflow
+# ============================================================================
+#  触发方式:
+#    1. 推送标签时自动构建并发布 Release
+#       - 形如 v1.0.0 的标签
+#       - 形如 1.0.0 / 3.5.4r 的纯数字开头标签
+#    2. 在 Actions 页面手动触发(workflow_dispatch),需填写一个已存在的标签
+#
+#  产物 (Release Assets):
+#    - native-obfuscator-<tag>.zip       分发包(工具 JAR + LICENSE/NOTICE/README/
+#                                        MODIFICATIONS.md,满足 GPL 分发要求)
+#    - native-obfuscator-<tag>-src.zip   该标签对应的完整对应源码(GPL-3.0 要求)
+#    - SHA256SUMS.txt                    产物校验和
+#
+#  说明:
+#    - 需要 Gradle 8.14.2。仓库 wrapper 是 9.x,与 shadow 插件 8.1.1 不兼容
+#      (错误: Could not add META-INF to ZIP),因此这里显式指定 8.14.2,
+#      不通过 ./gradlew 调用。
+#    - 只构建 :obfuscator:shadowJar,不跑测试套件(测试需要额外安装 Krakatau)。
+#
+#  ⚠️ 注意:本仓库保留了上游的大量历史标签(1.2b ... 3.5.4r)。
+#     请**不要**执行 `git push --tags`,否则会为本地上游旧标签逐个创建 Release!
+#     只推送你真正想发布的那一个标签,例如:
+#         git tag v1.0.0
+#         git push origin v1.0.0
+# ============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'       # 例如 v1.0.0
+      - '[0-9]*'   # 例如 1.0.0 / 3.5.4r(与本项目版本号风格一致)
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的标签(必须已存在,例如 v1.0.0)'
+        required: true
+        type: string
+
+# 创建 Release / 上传资产需要 contents:write
+permissions:
+  contents: write
+
+# 同一个标签不要并发跑两次
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # 必须 8.14.2:shadow 插件 8.1.1 不兼容 Gradle 9.x
+  GRADLE_VERSION: '8.14.2'
+  JAVA_VERSION: '17'
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. 解析出要发布的标签
+      # ------------------------------------------------------------------
+      - name: Resolve tag
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if [ -z "$TAG" ]; then
+            echo "::error::无法确定要发布的标签"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "解析出的标签: $TAG"
+
+      # ------------------------------------------------------------------
+      # 2. 检出该标签的源码
+      # ------------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+          fetch-depth: 0
+
+      # ------------------------------------------------------------------
+      # 3. 准备 JDK 与 Gradle
+      # ------------------------------------------------------------------
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle ${{ env.GRADLE_VERSION }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      # ------------------------------------------------------------------
+      # 4. 构建 fat jar(shadowJar 不依赖 test,不会跑测试套件)
+      # ------------------------------------------------------------------
+      - name: Build fat jar
+        run: gradle clean :obfuscator:shadowJar --console=plain
+
+      # ------------------------------------------------------------------
+      # 5. 收集产物 + 自检
+      # ------------------------------------------------------------------
+      - name: Collect artifacts
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+
+          JAR="$(find obfuscator/build/libs -maxdepth 1 -type f -name '*.jar' \
+                   ! -name '*-sources.jar' ! -name '*-javadoc.jar' \
+                   ! -name '*-plain.jar' | head -n1)"
+          if [ -z "$JAR" ]; then
+            echo "::error::未找到构建产物 JAR"
+            exit 1
+          fi
+          echo "构建产物: $JAR ($(du -h "$JAR" | cut -f1))"
+
+          mkdir -p dist
+          cp "$JAR" dist/native-obfuscator.jar
+          # GPL-3.0 分发二进制时需附带许可证与版权声明
+          cp LICENSE NOTICE MODIFICATIONS.md README.md dist/
+
+          echo "--- 产物自检 ---"
+          java -jar dist/native-obfuscator.jar --version
+
+          # 分发包(工具 + 文档)
+          (cd dist && zip -q -r "../native-obfuscator-${TAG}.zip" .)
+          rm -rf dist
+
+          # 完整对应源码(GPL-3.0 要求)
+          git archive --format=zip --prefix="native-obfuscator-${TAG}/" \
+              -o "native-obfuscator-${TAG}-src.zip" "$TAG"
+
+          sha256sum "native-obfuscator-${TAG}.zip" \
+                    "native-obfuscator-${TAG}-src.zip" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # ------------------------------------------------------------------
+      # 6. 生成 Release 说明
+      # ------------------------------------------------------------------
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          SHA="$(git rev-parse --short HEAD)"
+
+          cat > RELEASE_NOTES.md <<EOF
+          # native-obfuscator ${TAG}
+
+          本仓库是 [radioegor146/native-obfuscator](https://github.com/radioegor146/native-obfuscator)
+          的扩展分支(Fork),基线版本 **v3.5.4r**,以 **GPL-3.0** 授权发布。
+
+          ## 本 Fork 新增内容
+
+          - **输出可自由修改的 Java + C++ 源工程**:转译时额外输出 Loader.java
+            与完整 C++ 源码工程,并附带一键重编译脚本 build.sh。
+            上游只输出编译好的 Loader.class(黑盒),无法修改。
+          - **行为完全兼容上游**:原有 JAR 输出流程未做任何改动。
+          - **GPL-3.0 合规材料**:NOTICE、MODIFICATIONS.md、逐个源文件的变更声明。
+
+          ## 构建信息
+
+          | 项 | 值 |
+          |---|---|
+          | 标签 | \`${TAG}\` |
+          | 提交 | \`${SHA}\` |
+          | JDK | ${JAVA_VERSION} |
+          | Gradle | ${GRADLE_VERSION} |
+
+          ## 下载说明
+
+          | 文件 | 说明 |
+          |---|---|
+          | \`native-obfuscator-${TAG}.zip\` | 分发包:工具 JAR + LICENSE / NOTICE / README / MODIFICATIONS.md |
+          | \`native-obfuscator-${TAG}-src.zip\` | 该标签对应的**完整对应源码**(GPL-3.0 要求) |
+          | \`SHA256SUMS.txt\` | 上述文件的 SHA-256 校验和 |
+
+          ## 许可证
+
+          本项目以 **GNU General Public License v3.0** 授权,与上游一致。
+
+          本软件是上游项目的**派生作品**:上游原始作品版权归原作者及贡献者所有,
+          本仓库保留其全部原始版权声明,并依据 GPL-3.0 §5(a) 标注了修改内容。
+          本仓库不是上游官方仓库,上游作者不对本 Fork 的改动负责。
+
+          依据 GPL-3.0,任何接收本软件二进制形式的用户都有权获得完整对应源码。
+          对应源码见附件 \`native-obfuscator-${TAG}-src.zip\`,
+          或访问 <https://github.com/xiaofanforfabric/native-obfuscator>。
+
+          ## 上游项目
+
+          - 上游仓库:<https://github.com/radioegor146/native-obfuscator>
+          - 原作者:radioegor146 and contributors
+          - 上游许可证:GNU GPL v3.0
+
+          ---
+
+          JDK 8+ 运行环境即可使用:\`java -jar native-obfuscator.jar <input.jar> <outputDir>\`
+          EOF
+
+          echo "已生成 Release 说明"
+          head -5 RELEASE_NOTES.md
+
+      # ------------------------------------------------------------------
+      # 7. 创建或更新 Release
+      # ------------------------------------------------------------------
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          ASSETS=(
+            "native-obfuscator-${TAG}.zip"
+            "native-obfuscator-${TAG}-src.zip"
+            "SHA256SUMS.txt"
+          )
+
+          # 预发布判断:
+          #   1.0.0-beta / v1.0.0-rc1  => 含 "-"
+          #   3.1b / 3.5.2b            => 本项目的 beta 命名约定(b = beta)
+          PRE=""
+          case "$TAG" in
+            *-*|*b) PRE="--prerelease" ;;
+          esac
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在,更新资产与说明 ..."
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$TAG" \
+              --title "$TAG" \
+              --notes-file RELEASE_NOTES.md \
+              --latest \
+              $PRE
+          else
+            echo "创建 Release $TAG ..."
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "$TAG" \
+              --notes-file RELEASE_NOTES.md \
+              --verify-tag \
+              $PRE
+          fi
+
+          echo "发布完成:"
+          gh release view "$TAG"
+
+      # ------------------------------------------------------------------
+      # 8. 汇总
+      # ------------------------------------------------------------------
+      - name: Summary
+        if: always()
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          {
+            echo "## Release \`${TAG}\`"
+            echo ""
+            echo "| 资产 | 说明 |"
+            echo "|---|---|"
+            echo "| \`native-obfuscator-${TAG}.zip\` | 工具分发包 |"
+            echo "| \`native-obfuscator-${TAG}-src.zip\` | 完整对应源码(GPL-3.0) |"
+            echo "| \`SHA256SUMS.txt\` | 校验和 |"
+            echo ""
+            echo "下载地址: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          } >> "$GITHUB_STEP_SUMMARY"
