@@ -41,6 +41,24 @@ Java .class to .cpp converter for use with JNI
 > - 本 Fork 继续以 **GPL-3.0** 授权,任何修改与分发均需遵循该许可证
 > - 上游原始作品的版权归原作者及贡献者所有,本 Fork 保留其全部原始版权声明
 >
+> ### ⚠️ 已知缺陷(使用前务必阅读)
+>
+> 本工具存在**若干继承自上游的已知缺陷**,其中两条会**在运行时直接崩溃**:
+>
+> | 编号 | 现象 | 严重度 |
+> |---|---|---|
+> | [KI-1](KNOWN_ISSUES.md#ki-1数组类型的类解析在隐藏类中必然失败) | 类初始化时报 `NoClassDefFoundError: [L你自己的类;` | **严重** |
+> | [KI-4](KNOWN_ISSUES.md#ki-4-隐藏类定义进-bootstrap-域不同插件互相冲突) | 同机装多个本工具处理过的插件时 `LinkageError: duplicate class definition` | **严重** |
+>
+> **两条都可以不改代码规避**:
+>
+> - **KI-1**:用 `-b/--black-list` 把报错的类排除掉(见
+>   `KNOWN_ISSUES.md` 中的检测脚本,可提前扫描出所有受影响的类);
+> - **KI-4**:**每个**插件都用 `--custom-lib-dir <唯一名字>`(如插件名)转译。
+>
+> 完整清单、根因分析、实测影响范围与可重跑的复现脚本见
+> **[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**。
+>
 > ---
 >
 > 以下为上游原始 README 内容(用于说明本工具的基础功能)。
@@ -48,6 +66,16 @@ Java .class to .cpp converter for use with JNI
 ---
 
 Currently, fully supports only Java 8. Java 9+ and Android support is entirely experimental
+
+> **Note from this fork**: the sentence above is upstream's original statement. A large part of
+> the "Java 9+ does not work" reputation comes from a single hardcoded line
+> (`classNode.version = 52`) that rewrote every class to Java 8. Because HotSpot **silently
+> ignores** class file attributes newer than the declared version, modern features (most
+> visible: `record` classes) appeared to be broken. This fork preserves the original class
+> version by default, so modern inputs keep their modern attributes. See the
+> [`--class-version`](#arguments) option if you need the old behaviour back.
+>
+> Android support remains experimental as upstream stated.
 
 Warning: blacklist/whitelist usage is recommended because this tool slows down code significantly (like do not obfuscate full Minecraft .jar)
 
@@ -91,6 +119,7 @@ Also, this tool does not particularly obfuscate your code; it just transpiles it
 ### General usage:
 ```
 Usage: native-obfuscator [-ahV] [--debug] [-b=<blackListFile>]
+                         [--class-version=<version>]
                          [--custom-lib-dir=<customLibraryDirectory>]
                          [-l=<librariesDirectory>] [-p=<platform>]
                          [--plain-lib-name=<libraryName>] [-w=<whiteListFile>]
@@ -102,6 +131,17 @@ Transpiles .jar file into .cpp files and generates output .jar file
   -b, --black-list=<blackListFile>
                           File with a list of blacklist classes/methods for
                             transpilation
+      --class-version=<version>
+                          Class file version to write for the transpiled
+                            classes.
+                          Accepts a class file major version (>= 45, e.g. 52 =
+                            Java 8, 61 = Java 17, 65 = Java 21)
+                          or a Java release number (<= 44, e.g. 8, 11, 17, 21).
+                          Default: preserve the original version of each class.
+                          Note: forcing a version lower than the input makes
+                            HotSpot silently ignore
+                          attributes introduced later (e.g. Record below major
+                            60 breaks Class#isRecord()).
       --custom-lib-dir=<customLibraryDirectory>
                           Custom library directory for LoaderUnpack
       --debug             Enable generation of debug .jar file (non-executable)
@@ -133,6 +173,35 @@ Three options are available:
  - `hotspot`: will use HotSpot JVM internals and should work with most obfuscators (even with stack trace checking as well)
  - `std_java`: will use only minor JVM internals that must be available on all JVMs
  - `android`: use this method when building library for Android. Will use no JVM internals, as well as no DefineClass for hidden methods (obfuscators that rely on stack for string/name obfuscator will not work due to the fact that some methods will not be hidden)
+
+`--class-version <version>` - class file version to write for the transpiled classes, optional
+
+Accepts either a **class file major version** (`>= 45`, e.g. `52` = Java 8, `61` = Java 17, `65` = Java 21)
+or a **Java release number** (`<= 44`, e.g. `8`, `11`, `17`, `21`). The two ranges never overlap, so
+both spellings are unambiguous: `--class-version 8` and `--class-version 52` mean the same thing.
+
+By default (**recommended**) the original version of each input class is preserved, so a Java 8 JAR
+still produces version 52 output while a Java 17 JAR keeps major version 61 and therefore keeps all
+of its modern attributes.
+
+```bash
+# preserve original class versions (default, recommended)
+java -jar native-obfuscator.jar input.jar output/ -p hotspot
+
+# force Java 8 output (legacy upstream behaviour)
+java -jar native-obfuscator.jar input.jar output/ -p hotspot --class-version 8
+
+# force Java 17 output
+java -jar native-obfuscator.jar input.jar output/ -p hotspot --class-version 17
+```
+
+> **Why the default changed**: upstream unconditionally executed `classNode.version = 52`, which
+> downgraded *every* class to Java 8 regardless of its input version. HotSpot ignores class file
+> attributes that are newer than the version declared in the class file, and it does so
+> **silently**. The most visible casualty is the `Record` attribute (only honoured from major
+> version 60 / Java 16 onwards): a downgraded `record` class still contains the attribute, but
+> `Class#isRecord()` returns `false` and `Class#getRecordComponents()` returns `null`. Use
+> `--class-version 8` only if you specifically need the legacy behaviour.
 
 `-a` - enable annotation processing
 

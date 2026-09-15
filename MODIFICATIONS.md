@@ -34,7 +34,9 @@
 │      ★ 输出可自由修改的 Java + C++ 源工程                       │
 │      ★ 修复构建:Gradle 版本降回 8.14.2 (上游 9.x 无法构建)      │
 │      ★ 标签自动发布 GitHub Release                              │
-│      ★ GPL-3.0 合规材料 (NOTICE / MODIFICATIONS.md)            │
+│      ★ GPL-3.0 合规材料 (NOTICE / MODIFICATIONS.md)             │
+│      ★ KNOWN_ISSUES.md:记录并规避上游遗留缺陷                   │
+│      ★ scripts/repro-ki1.sh, repro-ki4.sh:缺陷可复现脚本        │
 │      ★ 行为与上游完全兼容,原有输出流程未改动                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -96,6 +98,7 @@ GPL-3.0 的义务**只在「分发」(convey / distribute)时触发**:
 - [ ] `LICENSE`(GPL-3.0 全文)随分发物一起提供
 - [ ] `NOTICE`(版权归属)随分发物一起提供
 - [ ] `MODIFICATIONS.md`(变更记录)随分发物一起提供
+- [ ] `KNOWN_ISSUES.md`(已知缺陷)随分发物一起提供(便于使用方规避)
 - [ ] 所有修改过的源文件顶部有醒目变更声明
 - [ ] 用户能通过某个渠道获取完整对应源码
 - [ ] 未删除或篡改上游版权头
@@ -129,6 +132,32 @@ GPL-3.0 的义务**只在「分发」(convey / distribute)时触发**:
 └─────────────────────────────────────┘
 ```
 
+## 已知缺陷 (Known Issues)
+
+本 Fork 目前**包含若干继承自上游的已知缺陷**,已在真实项目中验证并整理成册,
+见根目录 **[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**。
+
+| 编号 | 缺陷 | 严重度 | 状态 |
+|---|---|---|---|
+| KI-1 | 数组类型的类解析在隐藏类中必然失败 | **严重**(已确认线上崩溃) | 已定位,未修复 |
+| KI-2 | `MULTIANEWARRAY` 多维分支存在同源缺陷 | 中 | 已定位,尚未触发 |
+| KI-3 | `HiddenMethodsPool` 方法名与计数器无分隔符拼接 | 低(代码异味) | 当前无害 |
+| KI-4 | 隐藏类定义进 bootstrap 域,不同插件互相冲突 | **严重**(已实证) | 已定位,未修复 |
+
+这些缺陷**均为上游 v3.5.4r 固有**,不是本 Fork 引入的。本 Fork 只做记录,不改变
+转译行为。`KNOWN_ISSUES.md` 中给出了:可独立复现的 JNI 最小实验、全量扫描脚本、
+实测影响范围,以及**不改代码即可生效的黑名单 / `--custom-lib-dir` 规避方案**。
+
+其中 KI-1 与 KI-4 的复现已脚本化,可直接重跑(需要已构建好的 `obfuscator.jar`):
+
+```bash
+bash scripts/repro-ki1.sh obfuscator/build/libs/obfuscator.jar   # 数组类型 NoClassDefFoundError
+bash scripts/repro-ki4.sh obfuscator/build/libs/obfuscator.jar   # 双插件 bootstrap 域撞名
+```
+
+两个脚本都会自动完成「生成源码 → 转译 → 编译 `.so` → 打包 JAR → 运行」,
+并打印「加规避 / 不加规避」的 A/B 对照结论。
+
 ## 修改记录
 
 ### 未来计划修改
@@ -155,7 +184,274 @@ GPL-3.0 的义务**只在「分发」(convey / distribute)时触发**:
    - [ ] 配置文件支持 (YAML/JSON)
    - [ ] 交互式配置向导
 
+5. **修复上游遗留缺陷**(详见 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md))
+   - [ ] KI-1:数组类型改用显式 `classloader` 解析,不再走隐藏类里的 `FindClass`
+   - [ ] KI-4:隐藏类名加入内容哈希,避免不同插件在 bootstrap 域撞名
+   - [ ] KI-2:多维数组分支与 KI-1 同源,一并修掉
+   - [ ] KI-3:方法名与计数器之间加分隔符
+
+   > 这些修复会**改变 `classIndex` 分配**,属于破坏性变更,需要单独一个版本发布。
+
 ### 已实施的修改
+
+#### v1.4.2 - 2026-09-16 - 缺陷调查:记录并规避上游遗留缺陷(不改转译行为)
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**背景**: 把一个用本工具转译过的 Bukkit 插件部署到真实 Minecraft 服务器后,
+插件在类初始化阶段崩溃。顺着这条线索做了一次系统性的缺陷排查,
+又发现了另外几处同类问题,现全部整理成 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)。
+
+**本次新增**:
+
+- [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) —— 4 条已知缺陷的完整记录
+  (现象 / 根因 / 证据链 / 实测影响范围 / 规避 / 修复方向);
+- `scripts/repro-ki1.sh` —— KI-1 的一键复现(无需 Minecraft,
+  自动完成「生成源码 → 转译 → 编译 `.so` → 打包 → 运行」并打印 A/B 对照);
+- `scripts/repro-ki4.sh` —— KI-4 的一键复现(同一 JVM 里装载两个插件);
+- `README.md` / `MODIFICATIONS.md` —— 显著位置提示已知缺陷与规避方法。
+
+**记录的四条缺陷**:
+
+| 编号 | 缺陷 | 严重度 | 状态 |
+|---|---|---|---|
+| KI-1 | 数组类型的类解析在隐藏类中必然失败 | **严重** | 已定位,未修复 |
+| KI-2 | `MULTIANEWARRAY` 多维分支存在同源缺陷 | 中 | 已定位,本项目不可达 |
+| KI-3 | `HiddenMethodsPool` 方法名与计数器无分隔符拼接 | 低 | 已证明当前无害 |
+| KI-4 | 隐藏类定义进 bootstrap 域,不同插件互相冲突 | **严重** | 已实证,未修复 |
+
+**⚠️ 本次提交不包含任何转译行为的修改。** 四条缺陷全部继承自上游 v3.5.4r,
+使用方通过**黑名单**(`-b`)或 **`--custom-lib-dir`** 即可规避,无需改动本工具。
+
+#### v1.4.1 - 2026-09-16 - 修复 native 函数名歧义导致的 C++ 重定义
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**问题**: 某些类在转译后生成的 `.cpp` **无法通过 C++ 编译**:
+
+```
+error: redefinition of 'void native_jvm::classes::__ngen_ac_grim_grimac_utils_blockplace_BlockPlaceResult_443::__ngen_native_lambdau36staticu36779(JNIEnv*, jclass, jobject, jobject)'
+  |  void JNICALL __ngen_native_lambdau36staticu36779(JNIEnv *env, jclass clazz, ...)
+  |  note: '...::__ngen_native_lambdau36staticu36779(...)' previously defined here
+```
+
+同一个类里出现了**两个同名同签名的 C++ 函数定义**。这不是转译逻辑出错,
+而是**函数名拼接有歧义** —— 两个不同的 Java 方法被映射到了同一个符号。
+
+**根因**: `DefaultSpecialMethodProcessor.preProcess()` 中:
+
+```java
+return "native_" + context.method.name + context.methodIndex;   // ← 漏洞在这里
+```
+
+方法名和方法索引**直接拼接,中间没有分隔符**,于是方法名尾部的数字和索引
+糊在一起、无法区分。紧接着 `MethodProcessor` 又会调用
+`Util.escapeCppNameString()` 做转义,而它**只改写非字母数字的字符**:
+
+```java
+// Util.java
+Matcher m = Pattern.compile("([^a-zA-Z_0-9])").matcher(value);
+m.appendReplacement(sb, String.format("u%d", (int) m.group(1).charAt(0)));
+```
+
+注意 `_` 和数字都**不在**被转义的字符集里,所以拼接后的歧义会**原样保留**到
+最终符号名。
+
+**真实触发案例**(GrimAC Bukkit 反作弊插件,
+`ac/grim/grimac/utils/blockplace/BlockPlaceResult`):
+
+| 方法索引 | 原始方法名 | 拼接结果 | 转义后的 C++ 符号 |
+|---|---|---|---|
+| `9` | `lambda$static$77` | `native_lambda$static$779` | `__ngen_native_lambdau36staticu36779` |
+| `79` | `lambda$static$7` | `native_lambda$static$779` | `__ngen_native_lambdau36staticu36779` |
+
+`lambda$static$77` + `9` 与 `lambda$static$7` + `79` 得到完全相同的字符串。
+该触发条件需要同时满足:
+
+1. 类里存在**两个**这样编号的合成方法(如 `lambda$static$7` 与 `lambda$static$77`),
+   即"一个方法名是另一个加了数字后缀";
+2. 类的**方法总数足够多**(索引位数发生变化),使 `名+索引` 与 `短名+长索引` 相等。
+
+所以小的测试类几乎碰不到,只有大型真实项目才会踩中。任何形式的
+`access$N` / `lambda$...$N` 编号方法都有同样的风险。
+
+**改动文件**:
+
+- `obfuscator/src/main/java/by/radioegor146/special/DefaultSpecialMethodProcessor.java`
+  - 补上 GPL 修改声明头。
+  - `"native_" + context.method.name + context.methodIndex`
+    → `"native_" + context.method.name + "_" + context.methodIndex`
+
+同文件中的另外两个命名点本来就是安全的,无需改动:
+
+```java
+String.format("interfacestatic_%d_%d", context.classIndex, context.methodIndex)
+String.format("special_clinit_%d_%d", context.classIndex, context.methodIndex)   // ClInitSpecialMethodProcessor
+```
+
+**为什么加 `_` 就够了**:`Util.escapeCppNameString()` 会保留 `_`,而
+`methodIndex` 是**纯数字串**。设拼接结果为 `名 + "_" + 索引`,由于索引里不含 `_`,
+**最后一个 `_` 之后的部分必然就是索引**,因此 `(方法名, 索引) → 符号名` 的映射是
+单射,不可能再冲突。
+
+**兼容性**:
+
+- 生成的原生函数名会变化,但该名字**只用于原生库内部**:它同时被写入
+  `.cpp` 函数定义、`.hpp` 声明、`__ngen_methods[]` 注册表和
+  `HiddenCppMethod`(`NativeObfuscator:370`),全部由同一个字符串派生,
+  所以改名是**自洽**的,不影响任何 Java 侧可见行为。
+- 输出 JAR 的 Java 字节码不变,只有 `lib/` 里的 `.so` 内容不同。
+- **需要重新编译 C++**:函数名变了,旧的目标文件必须清掉重建。
+
+**验证**(GrimAC Bukkit 插件,10.5 MB / 4601 个类,530 个类被转译):
+
+| 检查项 | 修复前 | 修复后 |
+|---|---|---|
+| 转译是否报错 | 否(静默生成坏代码) | 否 |
+| `BlockPlaceResult` 的 lambda 符号 | `...u3677` + `9` = `...u36779`(与索引 79 撞车) | `...u3677_9`(唯一) |
+| 全量 529 个 `.cpp` 的函数定义重名 | 1 组 | **0 组** |
+| 全量 `__ngen_methods[]` 注册重名 | 1 组 | **0 组** |
+| C++ 编译 | 编译到 83% 时 `error: redefinition` 中断 | **通过:529 + 3 个文件全部编译,0 错误,21 分 27 秒** |
+| 链接产物 | 无 | `libnative_library.so`,32.9 MB,7210 个导出符号,含 `JNI_OnLoad` |
+| 打包后 JAR | 无 | 18.9 MB / 5323 条目,`native0/x64-linux.so` + `native0/Loader.class` 就位 |
+| 被转译类方法 | —— | `BlockPlaceResult` 85 个方法全部 `native`(89 个方法减去 4 个构造函数) |
+| 被转译类版本 | —— | `major=61`(Java 17,证明 v1.4.0 版本保留亦生效) |
+| 加载链路 | —— | `GrimACBukkitLoaderPlugin.<clinit>` → `native0/Loader.registerNativesForClass(int, Class)` |
+
+复现用的独立验证方法(不依赖 C++ 编译器,可快速排查同类问题):
+
+```bash
+# 1. 粗筛:扫描生成的 .cpp 是否有重复函数定义
+for c in cpp/output/*.cpp; do
+    dup=$(grep -oE "JNICALL __ngen_[A-Za-z0-9_]+\(JNIEnv" "$c" | sort | uniq -d)
+    [ -n "$dup" ] && { echo "[冲突] $c"; echo "$dup"; }
+done
+
+# 2. 精确定位:按转译器同样的算法(方法名 + 方法索引 + 转义)枚举符号并查重
+#    见 testp/grimAC/work/inspect 下的模拟脚本思路:
+#    symbol = "__ngen_" + escape("native_" + name + "_" + index)
+```
+
+#### v1.4.0 - 2026-09-16 - 保留原始 class 版本(修复 Java 9+ 特性被静默丢弃)
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**问题**: 上游在 `NativeObfuscator` 中**无条件**执行 `classNode.version = 52`,
+即无论输入类原本是什么版本,输出**一律改写成 Java 8**。
+
+HotSpot 会**静默忽略**"版本号高于 class 文件所声明版本"的属性——不报错、不警告,
+属性直接当不存在。最直观的受害者是 `Record` 属性(只有 major version ≥ 60,即
+Java 16 起才被识别):
+
+```java
+record Point(int x, int y) {}
+Point.class.isRecord();          // 被降级成 52 后返回 false
+Point.class.getRecordComponents(); // 返回 null
+```
+
+`Record` 属性其实**仍然存在于 class 文件里**,只是 JVM 按版本号把它跳过了。
+这也是上游"Java 9+ 支持完全是实验性的"这一结论的重要来源之一:很多现代特性
+不是不能被转译,而是转译后被这行代码削掉了。
+
+**改动文件**:
+
+- `obfuscator/src/main/java/by/radioegor146/NativeObfuscator.java`
+  - 新增字段 `targetClassVersion`(默认 `-1`,`<= 0` 表示保留原版本)。
+  - 新增公开 API `setClassVersion(int)` / `getClassVersion()`,支持链式调用。
+  - 把 `classNode.version = 52;` 改为:
+    `targetClassVersion > 0 ? targetClassVersion : classNode.version`,
+    并把生效版本同步给 `hiddenMethodsPool`。
+  - 在生成隐藏类(synthetic `HiddenN`)之前统一套用生效版本:显式指定时用指定值,
+    否则用所有已处理类中的**最高**版本(隐藏类体内联了来自不同类的代码,
+    取最高版本可保证这些代码用到的属性不被丢弃)。
+- `obfuscator/src/main/java/by/radioegor146/HiddenMethodsPool.java`
+  - 新增 `classVersion` 字段与 `bumpClassVersion(int)` / `getClassVersion()`,
+    跟踪所处理类的最高版本。
+  - `getMethod(...)` 中原先硬编码的 `classNode.version = 52;` 改为 `classNode.version = classVersion;`。
+- `obfuscator/src/main/java/by/radioegor146/Main.java`
+  - 新增 `--class-version <version>` 命令行选项(默认 `null` = 保留原版本)。
+  - 新增静态内部类 `ClassVersionConverter implements CommandLine.ITypeConverter<Integer>`,
+    把"Java 版本号"与"class 文件 major version"统一成 major version
+    (`< 45` 视为 Java 版本号,`+44`)。做成 picocli 转换器而不是在 `call()` 里校验,
+    是为了让错误值走 picocli 的标准用法错误通道(打印 `Invalid value for option
+    '--class-version': ...` + 用法,退出码 2),而不是抛栈:
+
+    ```text
+    $ java -jar obfuscator.jar a.jar out --class-version 0
+    Invalid value for option '--class-version': must be a positive number, got 0
+    Usage: native-obfuscator [-ahV] [--debug] [-b=<blackListFile>] ...
+
+    $ java -jar obfuscator.jar a.jar out --class-version abc
+    Invalid value for option '--class-version': 'abc' is not a number
+      (expected a Java release number like 17, or a class file major version like 61)
+    Usage: native-obfuscator [-ahV] [--debug] [-b=<blackListFile>] ...
+    ```
+
+- `README.md` / `MODIFICATIONS.md` —— 同步更新参数说明与用法。
+
+**兼容性**: 默认行为对 Java 8 输入**完全等价**于上游(Java 8 类的原版本就是 52),
+只有 Java 9+ 输入的行为发生变化(这是修复)。需要旧行为时显式加
+`--class-version 8`;作为库调用时用 `setClassVersion(52)`。
+
+**新增命令行选项**:
+
+```bash
+# 默认: 保留每个类的原始版本(推荐)
+java -jar native-obfuscator.jar input.jar output/ -p hotspot
+
+# 强制 Java 8 输出(上游旧行为)
+java -jar native-obfuscator.jar input.jar output/ -p hotspot --class-version 8
+
+# 强制 Java 17 输出
+java -jar native-obfuscator.jar input.jar output/ -p hotspot --class-version 17
+```
+
+**验证**:
+
+测试素材为本地 Java 17 特性矩阵工程(record / sealed interface / 嵌套类 / 接口私有方法 /
+switch 表达式 / 模式匹配 instanceof / text block / var / lambda / 匿名类),
+`javac` 编译基线为 **major version 61**。`Main` 末尾打印 `Class#isRecord()` 的结果,
+作为"版本是否被降级"的探针。
+
+输出 JAR 中的 class 版本(`native0/Loader.class` 恒为 52,它是工具自带的加载器,
+与输入无关):
+
+| 类 | 默认(保留) | `--class-version 8` | `--class-version 17` |
+|---|---|---|---|
+| `test17/Circle.class`(record) | 61 | **52** | 61 |
+| `test17/Square.class`(record) | 61 | **52** | 61 |
+| `test17/Iface.class` | 61 | **52** | 61 |
+| `test17/Main.class` | 61 | **52** | 61 |
+| `test17/Switches.class` | 61 | **52** | 61 |
+| `test17/NestDemo$Inner.class` | 61 | **52** | 61 |
+| `test17/Ann.class`、`Main$1.class`、`NestDemo.class`、`Shape.class` | 61 | 61 | 61 |
+| `native0/Loader.class` | 52 | 52 | 52 |
+
+> 最后一行之外的例外说明: `Ann`(注解类型)、`Main$1`(编译器合成的 switch-map 持有类)、
+> `NestDemo`(仅有 `<init>`)、`Shape`(无方法体的 sealed 接口)**没有可转译的方法体**,
+> 因此原样透传,版本不受 `--class-version` 影响。这是预期行为——版本只作用于
+> 真正被转译的类。
+
+运行结果(`java -cp <jar> test17.Main`,编译原生库后):
+
+| 探针 | 未混淆基线 | 默认 | `--class-version 8` | `--class-version 17` |
+|---|---|---|---|---|
+| `isRecord(Circle.class)` | `true` | `true` | **`false`** | `true` |
+| `isRecord(Rectangle.class)` | `false` | `false` | `false` | `false` |
+| 其余全部输出行 | —— | 与基线**逐行完全一致** | 与基线一致 | 与基线**逐行完全一致** |
+
+也就是说:
+
+- **默认行为修复了问题**: record 的 `Record` 属性被保留,`Class#isRecord()` 正常返回 `true`。
+- **`--class-version 8` 精确复现上游缺陷**: 程序逻辑照旧能跑,但 `isRecord()` 退化成
+  `false`——这正是"Java 9+ 特性看起来不支持"的真实成因,而不是转译本身出错。
+
+**构建前提**: `./gradlew clean :obfuscator:shadowJar`(Gradle 需为 8.14.2,见 v1.3.0),
+产物 `obfuscator/build/libs/obfuscator.jar`;`java -jar .../obfuscator.jar --version`
+输出 `native-obfuscator 3.5.4r`。
 
 #### v1.3.0 - 2026-09-16 - 修复 Gradle 版本(构建可用)+ 标签自动发布
 
@@ -333,6 +629,7 @@ java -jar native-obfuscator.jar input.jar output/ \
 | `-a` | 使用注解模式 | `-a` |
 | `--debug` | 调试模式 | `--debug` |
 | `--custom-lib-dir` | 自定义库目录 | `--custom-lib-dir mylibs/` |
+| `--class-version` | 输出 class 文件版本,可填 Java 版本号(`8`/`17`/`21`)或 major version(`52`/`61`/`65`);不填则**保留原始版本** | `--class-version 17` |
 
 ### 进程调用示例
 
@@ -348,6 +645,48 @@ proc->setArguments({
 });
 proc->start();
 ```
+
+### 作为库使用(Java 编程接口)
+
+除了命令行,也可以把 `obfuscator.jar` 直接放进 classpath,调用 `NativeObfuscator`
+的公开 API。`setClassVersion(...)` 返回 `this`,支持链式调用:
+
+```java
+import by.radioegor146.NativeObfuscator;
+import by.radioegor146.Platform;
+import java.nio.file.Paths;
+import java.util.Collections;
+
+public class Run {
+    public static void main(String[] args) throws Exception {
+        NativeObfuscator obfuscator = new NativeObfuscator();
+
+        // 可选: 指定输出 class 文件版本。
+        // 不调用则保留每个类的原始版本(推荐)。
+        // 传 class 文件 major version, 如 52 = Java 8, 61 = Java 17, 65 = Java 21。
+        obfuscator.setClassVersion(61);
+
+        // 读取当前生效的版本; -1 表示"保留原始版本"
+        int version = obfuscator.getClassVersion();
+
+        obfuscator.process(
+                Paths.get("input.jar"),
+                Paths.get("output"),
+                Collections.emptyList(),   // libraries
+                null,                      // blackList
+                null,                      // whiteList
+                "native",                  // libraryName
+                null,                      // customLibraryDirectory
+                Platform.HOTSPOT,
+                false,                     // useAnnotations
+                false                      // generateDebugJar
+        );
+    }
+}
+```
+
+> 注意: `NativeObfuscator` 的实例状态在 `process(...)` 调用之间是复用的,
+> 若需要为不同 JAR 使用不同版本,请分别构造实例或重新调用 `setClassVersion(...)`。
 
 ## 开发指南
 
