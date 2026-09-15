@@ -201,12 +201,20 @@ to the directory of the .jar file that this tool will print in `stdout` (by defa
 ### Building the tool by yourself
 1. Run `gradlew assemble` to force gradle not to run tests after the build
 
+> **本 Fork 说明:** 需要 **Gradle 8.14.2**(wrapper 已固定在该版本)。
+> 上游曾把 wrapper 升到 9.x,但 `shadow` 插件 8.1.1 与 Gradle 9 不兼容,会导致
+> `:obfuscator:shadowJar` 失败(`Could not add META-INF to ZIP`)。详见 `MODIFICATIONS.md`。
+
 ---
 
 ### Tests
 You need to have [Krakatau](https://github.com/Storyyeller/Krakatau) installed to your PATH, because test suite is using `krak2` for some tests
 
 1. Run `gradlew build` to assemble and run full test suite
+
+> **本 Fork 说明:** 本 Fork 不再在 CI 中运行上游的测试矩阵(其测试依赖 Krakatau 与
+> 多版本 JDK 工具链)。发布流程只构建 `:obfuscator:shadowJar`。
+> 如需本地跑测试,请自行安装 Krakatau 后执行 `gradlew test`。
 
 This tool uses tests from [huzpsb/JavaObfuscatorTest](https://github.com/huzpsb/JavaObfuscatorTest)
 

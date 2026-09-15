@@ -32,6 +32,8 @@
 │                                                                 │
 │    相对上游新增:                                                │
 │      ★ 输出可自由修改的 Java + C++ 源工程                       │
+│      ★ 修复构建:Gradle 版本降回 8.14.2 (上游 9.x 无法构建)      │
+│      ★ 标签自动发布 GitHub Release                              │
 │      ★ GPL-3.0 合规材料 (NOTICE / MODIFICATIONS.md)            │
 │      ★ 行为与上游完全兼容,原有输出流程未改动                    │
 └─────────────────────────────────────────────────────────────────┘
@@ -155,6 +157,50 @@ GPL-3.0 的义务**只在「分发」(convey / distribute)时触发**:
 
 ### 已实施的修改
 
+#### v1.3.0 - 2026-09-16 - 修复 Gradle 版本(构建可用)+ 标签自动发布
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**问题**: 上游提交 `5cf558a Update Gradle wrapper to version 9.3.1` 把 wrapper 升到了
+Gradle 9.3.1,但 `shadow` 插件仍是 `8.1.1`,两者不兼容。结果是 `./gradlew build` /
+`./gradlew assemble` 必然失败:
+
+```
+Execution failed for task ':obfuscator:shadowJar'
+> Could not add META-INF to ZIP
+```
+
+也就是说,上游的构建说明在当前代码状态下是失效的。
+
+**改动文件**:
+
+- `gradle/wrapper/gradle-wrapper.properties`
+  - `distributionUrl` 从 `gradle-9.3.1-all.zip` 改为 `gradle-8.14.2-bin.zip`。
+  - 新增 `distributionSha256Sum`(Gradle 发行包完整性校验)。
+- `gradle/wrapper/gradle-wrapper.jar` / `gradlew` / `gradlew.bat`
+  - 用 Gradle 8.14.2 重新生成,保证 wrapper 与发行包版本匹配。
+- `.github/workflows/main.yml` —— **删除**
+  - 上游的多平台测试矩阵(JDK 8/11/17/21/25 × ubuntu/macos/windows,
+    另加 macOS-13 for JDK8),需要额外安装 Krakatau(Rust 工具链)才能跑通,
+    对本 Fork 的维护成本大于收益。
+- `.github/workflows/release.yml` —— **新增**
+  - 推送标签(`v*` 或纯数字开头,如 `3.5.4r`)时自动构建并发布 GitHub Release。
+  - 走 `./gradlew`(wrapper 已固定在 8.14.2),顺带在 CI 里守住"不能用 Gradle 9"这个约束。
+  - 只构建 `:obfuscator:shadowJar`,不跑测试套件(因此 CI 无需安装 Krakatau)。
+  - 构建后执行 `java -jar ... --version` 做产物自检。
+  - Release 资产:
+    - `native-obfuscator-<tag>.zip` —— 工具 JAR + `LICENSE`/`NOTICE`/`README`/`MODIFICATIONS.md`
+    - `native-obfuscator-<tag>-src.zip` —— 该标签的完整对应源码(`git archive`,满足 GPL-3.0)
+    - `SHA256SUMS.txt` —— 校验和
+  - 幂等:同一标签重跑会覆盖旧资产并更新说明,不报错。
+  - 预发布识别:标签含 `-`(如 `1.0.0-beta`)或以 `b` 结尾(本项目 beta 约定,如 `3.5.2b`)。
+- `README.md` / `MODIFICATIONS.md` —— 同步更新构建与发布说明。
+
+**验证**: 本地用 `./gradlew clean :obfuscator:shadowJar` 构建通过,
+产出 `obfuscator/build/libs/obfuscator.jar`(约 2.7 MB),
+`java -jar obfuscator.jar --version` 输出 `native-obfuscator 3.5.4r`。
+
 #### v1.1.0 - 2026-09-16 - 输出可自由修改的 Java + C++ 源项目
 
 **修改者**: xiaofanforfabric
@@ -214,10 +260,14 @@ output/
 
 ### 环境要求
 
-- JDK 8 或更高版本
-- Gradle 6.x 或更高版本
+- **JDK 17**(CI 与本地验证所用版本;源码 target 为 Java 1.8)
+- **Gradle 8.14.2** —— 由 `gradle/wrapper/gradle-wrapper.properties` 固定,
+  直接用 `./gradlew` 即可,无需自行安装
 - CMake 3.x (用于 C++ 编译)
 - C++ 编译器 (GCC/Clang/MSVC)
+
+> ⚠️ 不要使用 Gradle 9.x。`shadow` 插件 8.1.1 与 Gradle 9 不兼容,会导致
+> `:obfuscator:shadowJar` 报 `Could not add META-INF to ZIP`。
 
 ### 构建步骤
 
@@ -226,24 +276,36 @@ output/
 git clone https://github.com/xiaofanforfabric/native-obfuscator.git
 cd native-obfuscator
 
-# 2. 构建 JAR
-./gradlew build
+# 2. 构建 fat jar(只打包,不跑测试)
+./gradlew clean :obfuscator:shadowJar
 
 # 3. 查找输出
-ls -lh obfuscator/build/libs/native-obfuscator-*.jar
+ls -lh obfuscator/build/libs/obfuscator.jar
 ```
 
 ### 输出文件
 
-构建完成后,JAR 文件位于:
+构建完成后,可执行的 fat jar 位于:
 ```
-obfuscator/build/libs/native-obfuscator-3.5.4r.jar
+obfuscator/build/libs/obfuscator.jar
 ```
 
 将此文件复制到你的程序目录中使用:
 ```bash
-cp obfuscator/build/libs/native-obfuscator-*.jar /path/to/your-app/lib/native-obfuscator.jar
+cp obfuscator/build/libs/obfuscator.jar /path/to/your-app/lib/native-obfuscator.jar
 ```
+
+### 发布
+
+推送标签即会自动构建并发布 Release(见 `.github/workflows/release.yml`):
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0     # ⚠️ 不要用 git push --tags,仓库里有大量上游历史标签
+```
+
+Release 会附带:分发包 `native-obfuscator-<tag>.zip`、对应源码
+`native-obfuscator-<tag>-src.zip`、以及 `SHA256SUMS.txt`。
 
 ## 使用方式
 

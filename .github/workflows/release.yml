@@ -14,9 +14,9 @@
 #    - SHA256SUMS.txt                    产物校验和
 #
 #  说明:
-#    - 需要 Gradle 8.14.2。仓库 wrapper 是 9.x,与 shadow 插件 8.1.1 不兼容
-#      (错误: Could not add META-INF to ZIP),因此这里显式指定 8.14.2,
-#      不通过 ./gradlew 调用。
+#    - 需要 Gradle 8.14.2:shadow 插件 8.1.1 与 Gradle 9.x 不兼容
+#      (错误: Could not add META-INF to ZIP)。本仓库的 wrapper 已固定在
+#      8.14.2,因此这里直接走 ./gradlew,同时也等于在 CI 里守住这个约束。
 #    - 只构建 :obfuscator:shadowJar,不跑测试套件(测试需要额外安装 Krakatau)。
 #
 #  ⚠️ 注意:本仓库保留了上游的大量历史标签(1.2b ... 3.5.4r)。
@@ -94,16 +94,22 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Gradle ${{ env.GRADLE_VERSION }}
+      # setup-gradle 在这里主要提供依赖缓存(~/.gradle 与 wrapper dists)
+      - name: Set up Gradle (cache)
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
+          cache-read-only: false
 
       # ------------------------------------------------------------------
       # 4. 构建 fat jar(shadowJar 不依赖 test,不会跑测试套件)
       # ------------------------------------------------------------------
       - name: Build fat jar
-        run: gradle clean :obfuscator:shadowJar --console=plain
+        run: |
+          set -euo pipefail
+          echo "wrapper 使用的 Gradle 版本:"
+          grep '^distributionUrl' gradle/wrapper/gradle-wrapper.properties
+          ./gradlew clean :obfuscator:shadowJar --console=plain
 
       # ------------------------------------------------------------------
       # 5. 收集产物 + 自检
