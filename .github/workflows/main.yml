@@ -1,0 +1,71 @@
+name: Main pipeline
+on:
+  push:
+    branches:
+      - '**'
+    # 标签由 release.yml 处理,这里不要再触发(否则推标签会跑整套测试矩阵)
+    tags-ignore:
+      - '**'
+  pull_request:
+jobs:
+  build:
+    strategy:
+      matrix:
+        java: [8, 11, 17, 21, 25]
+        platform:
+          - os: ubuntu-latest
+            compiler_install_command: sudo apt install g++ cmake
+            krakatau_install_command: sudo cp ./target/release/krak2 /usr/local/bin/
+            cc: gcc
+            cxx: g++
+          - os: macos-latest
+            compiler_install_command: brew install cmake
+            krakatau_install_command: cp ./target/release/krak2 /usr/local/bin/
+            cc: clang
+            cxx: clang++
+          - os: windows-latest
+            compiler_install_command: choco install cmake
+            krakatau_install_command: copy ./target/release/krak2.exe C:/Windows
+            prebuild_script: '"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"'
+            cc: cl
+            cxx: cl
+        exclude: 
+          - java: 8
+            platform:
+              os: macos-latest
+        include:
+          - java: 8
+            platform:
+              os: macos-13
+              compiler_install_command: brew install cmake
+              krakatau_install_command: cp ./target/release/krak2 /usr/local/bin/
+              cc: clang
+              cxx: clang++
+    runs-on: ${{ matrix.platform.os }}
+    name: Run full test suite on JDK ${{ matrix.java }} on ${{ matrix.platform.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ matrix.java }}
+        distribution: temurin
+    - name: Install Rust toolchain for Krakatau
+      uses: dtolnay/rust-toolchain@stable
+    - name: Setup cache for Rust toolchain
+      uses: Swatinem/rust-cache@v2
+    - name: Install Krakatau
+      run: |
+        git clone https://github.com/Storyyeller/Krakatau.git
+        cd Krakatau
+        cargo build --release
+        ${{ matrix.platform.krakatau_install_command }}
+    - name: Install C++ dependencies
+      run: ${{ matrix.platform.compiler_install_command }}
+    - name: Build with Gradle
+      run: |
+        ${{ matrix.platform.prebuild_script }}
+        ./gradlew build
+      env:
+        CC: ${{ matrix.platform.cc }}
+        CXX: ${{ matrix.platform.cxx }}
