@@ -1,71 +1,89 @@
 name: Main pipeline
+
+# ===========================================================================
+# 这个工作流只做「推上来的代码还构建得起来吗」的快速校验。
+#
+# 它和上游 radioegor146/native-obfuscator 的 main.yml 有三处**故意**的差异,
+# 因为上游那份配置直接拿到本仓库来跑必定全红:
+#
+# 1) 矩阵里没有 JDK 25。
+#    本仓库 gradle/wrapper 固定 Gradle 8.14.2 —— shadow 插件 8.1.1 和 Gradle
+#    9.x 不兼容,所以升不上去。而 Gradle 8.14.2 官方只支持用 **JDK 8~24** 运行:
+#      "A JVM version between 8 and 24 is required to execute Gradle.
+#       JVM 25 and later versions are not yet supported."
+#    https://docs.gradle.org/8.14.2/userguide/compatibility.html
+#    带上 JDK 25 会让那个 job 在 ./gradlew 启动阶段直接失败,再叠加上游没关的
+#    fail-fast,结果就是「1 个 job 真失败 + 其余 14 个被 cancel」,看上去像
+#    15 个 job 一起炸了。
+#
+# 2) 只在 ubuntu-latest 上跑。
+#    - windows-latest:上游用 VS2019 Enterprise 的 vcvars64.bat 初始化 MSVC,
+#      这个路径在现代 runner 上已经不存在(runner 上是 VS2022),必然失败;
+#    - macos-latest:runner 按 10 倍计费,而本项目的主要部署环境是 Linux 服务器。
+#    哪天需要跨平台验证,把 platform 矩阵加回来即可。
+#
+# 3) 不跑 `./gradlew test`。
+#    测试依赖 krak2(Krakatau,需要 clone 下来 cargo build 好几分钟),每次 push
+#    都跑代价太大;发布前的完整校验由 release.yml 负责。
+# ===========================================================================
+
 on:
   push:
     branches:
       - '**'
-    # 标签由 release.yml 处理,这里不要再触发(否则推标签会跑整套测试矩阵)
+    # 标签由 release.yml 处理,这里不要再触发(否则推标签会跑整套构建矩阵)
     tags-ignore:
       - '**'
   pull_request:
+
+# 同一分支连续 push 时,取消上一次还没跑完的运行
+concurrency:
+  group: main-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build on JDK ${{ matrix.java }}
+    runs-on: ubuntu-latest
     strategy:
+      # 显式关掉 fail-fast。上游把它开着,任何单个 job 失败都会把其余 job 一起
+      # cancel,屏幕上只剩一片红,根本看不出到底有几个 JDK 真的有问题。
+      fail-fast: false
       matrix:
-        java: [8, 11, 17, 21, 25]
-        platform:
-          - os: ubuntu-latest
-            compiler_install_command: sudo apt install g++ cmake
-            krakatau_install_command: sudo cp ./target/release/krak2 /usr/local/bin/
-            cc: gcc
-            cxx: g++
-          - os: macos-latest
-            compiler_install_command: brew install cmake
-            krakatau_install_command: cp ./target/release/krak2 /usr/local/bin/
-            cc: clang
-            cxx: clang++
-          - os: windows-latest
-            compiler_install_command: choco install cmake
-            krakatau_install_command: copy ./target/release/krak2.exe C:/Windows
-            prebuild_script: '"C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"'
-            cc: cl
-            cxx: cl
-        exclude: 
-          - java: 8
-            platform:
-              os: macos-latest
-        include:
-          - java: 8
-            platform:
-              os: macos-13
-              compiler_install_command: brew install cmake
-              krakatau_install_command: cp ./target/release/krak2 /usr/local/bin/
-              cc: clang
-              cxx: clang++
-    runs-on: ${{ matrix.platform.os }}
-    name: Run full test suite on JDK ${{ matrix.java }} on ${{ matrix.platform.os }}
+        java: [8, 11, 17, 21]
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK ${{ matrix.java }}
-      uses: actions/setup-java@v4
-      with:
-        java-version: ${{ matrix.java }}
-        distribution: temurin
-    - name: Install Rust toolchain for Krakatau
-      uses: dtolnay/rust-toolchain@stable
-    - name: Setup cache for Rust toolchain
-      uses: Swatinem/rust-cache@v2
-    - name: Install Krakatau
-      run: |
-        git clone https://github.com/Storyyeller/Krakatau.git
-        cd Krakatau
-        cargo build --release
-        ${{ matrix.platform.krakatau_install_command }}
-    - name: Install C++ dependencies
-      run: ${{ matrix.platform.compiler_install_command }}
-    - name: Build with Gradle
-      run: |
-        ${{ matrix.platform.prebuild_script }}
-        ./gradlew build
-      env:
-        CC: ${{ matrix.platform.cc }}
-        CXX: ${{ matrix.platform.cxx }}
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      - name: Install C++ dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ cmake
+
+      # JDK 8 上只验证「源码仍然只用 Java 8 的语法」:shadow 8.1.1 自己需要
+      # JDK 11+ 才能运行 Gradle,所以在 JDK 8 上打不出 fat jar。
+      # 但这一项恰恰是唯一能拦住「误用 Java 9+ 新 API」的矩阵项 ——
+      # targetCompatibility=1.8 只约束字节码版本,并不检查 API 是否存在于 JDK 8。
+      - name: Build (JDK 8, compile only)
+        if: matrix.java == 8
+        run: ./gradlew :annotations:compileJava :obfuscator:compileJava --console=plain
+
+      - name: Build (shadowJar)
+        if: matrix.java != 8
+        run: ./gradlew :obfuscator:shadowJar --console=plain
+
+      - name: Smoke test (--version)
+        if: matrix.java != 8
+        run: |
+          set -euo pipefail
+          JAR=$(ls obfuscator/build/libs/*.jar | head -n 1)
+          echo "Built: $JAR"
+          java -jar "$JAR" --version

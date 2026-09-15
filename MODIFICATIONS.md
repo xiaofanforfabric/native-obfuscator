@@ -194,6 +194,53 @@ bash scripts/repro-ki4.sh obfuscator/build/libs/obfuscator.jar   # 双插件 boo
 
 ### 已实施的修改
 
+#### v1.4.3 - 2026-09-16 - CI:重新引入精简版 `main.yml`
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**背景**: v1.3.0 直接把上游的 `main.yml`(多平台测试矩阵)删掉了,导致分支和
+PR 完全没有构建校验。把上游那份原版配置加回来后 CI 立刻全红 —— 但原因不是
+代码坏了,而是上游的配置与本 Fork 的 Gradle 版本约束**互相矛盾**。
+
+**失败根因**(实测 run `35033974729`):15 个 job 里其实只有 **1 个**真的失败,
+其余 14 个是被 `fail-fast` 连带取消的(`canceled`)。真正失败的是
+**JDK 25 on macos-latest**,而它必定失败的原因是:
+
+> 本仓库 wrapper 固定 **Gradle 8.14.2**(shadow 8.1.1 与 Gradle 9.x 不兼容,
+> 见下面的 v1.3.0),而 Gradle 8.14.2 官方只支持用 **JDK 8~24** 来运行:
+> *"A JVM version between 8 and 24 is required to execute Gradle.
+> JVM 25 and later versions are not yet supported."*
+> —— <https://docs.gradle.org/8.14.2/userguide/compatibility.html>
+
+于是 `./gradlew` 在启动阶段就挂了,报 `Unsupported class file major version`。
+
+**改动**:重写 `.github/workflows/main.yml`,相对上游原版做了 5 处调整:
+
+| 调整 | 理由 |
+|---|---|
+| 矩阵去掉 JDK 25 | Gradle 8.14.2 不支持用 JDK 25 运行(见上) |
+| 只跑 `ubuntu-latest` | windows 用的 VS2019 Enterprise `vcvars64.bat` 在现代 runner 上已不存在(现为 VS2022);macOS runner 按 10 倍计费 |
+| `fail-fast: false` | 单个 JDK 失败不再把其余 job 一起 cancel,能一次看清全部结果 |
+| 不跑 `./gradlew test` | 测试依赖 krak2(要 clone + `cargo build` 好几分钟),每次 push 代价过大;发布前的完整校验由 `release.yml` 负责 |
+| 加 `concurrency` / `permissions` | 连续 push 自动取消上一次运行;token 权限收紧为 `contents: read` |
+
+保留 JDK 8/11/17/21 四个矩阵项,其中 **JDK 8 只跑 `compileJava`** —— 因为 shadow
+插件本身需要 JDK 11+ 才能运行 Gradle。这一项是唯一能拦住「误用 Java 9+ 新 API」
+的检查:`targetCompatibility = 1.8` 只约束字节码版本,并不检查 API 是否存在于 JDK 8。
+
+**验证**:本地用 JDK 17 执行 CI 中的同两条命令,均通过:
+
+```
+$ ./gradlew :obfuscator:shadowJar --console=plain
+BUILD SUCCESSFUL in 7s
+
+$ java -jar obfuscator/build/libs/obfuscator.jar --version
+native-obfuscator 3.5.4r
+```
+
+**⚠️ 本次提交只改 CI 配置,不涉及任何转译行为。**
+
 #### v1.4.2 - 2026-09-16 - 缺陷调查:记录并规避上游遗留缺陷(不改转译行为)
 
 **修改者**: xiaofanforfabric
@@ -480,6 +527,9 @@ Execution failed for task ':obfuscator:shadowJar'
   - 上游的多平台测试矩阵(JDK 8/11/17/21/25 × ubuntu/macos/windows,
     另加 macOS-13 for JDK8),需要额外安装 Krakatau(Rust 工具链)才能跑通,
     对本 Fork 的维护成本大于收益。
+  - 后续说明:**v1.4.3 又补回了一个精简版 `main.yml`**(去掉 JDK 25、只跑
+    ubuntu、关掉 fail-fast、不跑测试套件),因为完全不校验分支也很危险。
+    详见下方的 v1.4.3。
 - `.github/workflows/release.yml` —— **新增**
   - 推送标签(`v*` 或纯数字开头,如 `3.5.4r`)时自动构建并发布 GitHub Release。
   - 走 `./gradlew`(wrapper 已固定在 8.14.2),顺带在 CI 里守住"不能用 Gradle 9"这个约束。
