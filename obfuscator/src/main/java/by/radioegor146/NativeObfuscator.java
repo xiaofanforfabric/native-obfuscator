@@ -1,3 +1,39 @@
+/*
+ * ============================================================================
+ *  MODIFIED FILE / 已修改文件
+ * ============================================================================
+ *
+ *  This file is part of native-obfuscator, which is licensed under the
+ *  GNU General Public License v3.0 (see the LICENSE file in the repository root).
+ *
+ *  本文件属于 native-obfuscator 项目,依据 GNU GPL v3.0 授权
+ *  (见仓库根目录 LICENSE 文件)。
+ *
+ *  MODIFIED BY / 修改者:
+ *      xiaofanforfabric
+ *
+ *  MODIFICATION DATE / 修改日期:
+ *      2026-09-16
+ *
+ *  DESCRIPTION OF CHANGES / 修改内容:
+ *      Added private method `emitSourceProject(...)` and a call to it, which
+ *      additionally emits a fully editable Java + C++ source project next to
+ *      the output JAR (editable Loader.java, build.sh, SOURCE_PROJECT.md).
+ *      The original upstream processing flow is unchanged.
+ *
+ *      新增私有方法 `emitSourceProject(...)` 及对其的调用,在输出 JAR 旁额外
+ *      生成一套可自由修改的 Java + C++ 源工程(可编辑的 Loader.java、build.sh、
+ *      SOURCE_PROJECT.md)。上游原有处理流程保持不变。
+ *
+ *      See MODIFICATIONS.md in the repository root for the full change log.
+ *      完整变更记录见仓库根目录 MODIFICATIONS.md。
+ *
+ *  ORIGINAL WORK / 原始作品:
+ *      Copyright (C) radioegor146 and contributors
+ *      https://github.com/radioegor146/native-obfuscator
+ * ============================================================================
+ */
+
 package by.radioegor146;
 
 import by.radioegor146.bytecode.PreprocessorRunner;
@@ -397,6 +433,9 @@ public class NativeObfuscator {
             resultLoaderClass.accept(classWriter);
             Util.writeEntry(out, loaderClassName + ".class", classWriter.toByteArray());
 
+            // === Local modification: emit a fully modifiable Java + C++ source project ===
+            emitSourceProject(outputDir, jarFile.getName(), nativeDir, plainLibName);
+
             logger.info("Jar file ready!");
             Manifest mf = jar.getManifest();
             if (mf != null) {
@@ -445,5 +484,65 @@ public class NativeObfuscator {
 
     public HiddenMethodsPool getHiddenMethodsPool() {
         return hiddenMethodsPool;
+    }
+
+    /**
+     * Local modification.
+     *
+     * Emits a fully modifiable Java + C++ source project next to the output jar so the
+     * user can freely edit the loader and the transpiled native code, then rebuild.
+     *
+     * Layout:
+     * <pre>
+     *   outputDir/
+     *   ├── &lt;jarName&gt;              # obfuscated jar
+     *   ├── build.sh                # one-shot rebuild + repack script
+     *   ├── SOURCE_PROJECT.md       # usage instructions
+     *   ├── java/&lt;nativeDir&gt;/Loader.java   # editable loader source
+     *   └── cpp/...                 # generated native sources
+     * </pre>
+     */
+    private void emitSourceProject(Path outputDir, String jarName, String nativeDir, String plainLibName)
+            throws IOException {
+        String dotPackage = nativeDir.replace('/', '.').replace('\\', '.');
+
+        // --- 1. Loader.java source ---
+        String loaderSource;
+        if (plainLibName == null) {
+            loaderSource = Util.readResource("compiletime/LoaderUnpack.java.template")
+                    .replace("package by.radioegor146.compiletime;", "package " + dotPackage + ";")
+                    .replace("LoaderUnpack", "Loader");
+        } else {
+            loaderSource = Util.readResource("compiletime/LoaderPlain.java.template")
+                    .replace("package by.radioegor146.compiletime;", "package " + dotPackage + ";")
+                    .replace("LoaderPlain", "Loader")
+                    .replace("%LIB_NAME%", plainLibName);
+        }
+
+        Path packageDir = outputDir.resolve("java").resolve(nativeDir);
+        Files.createDirectories(packageDir);
+        Files.write(packageDir.resolve("Loader.java"), loaderSource.getBytes(StandardCharsets.UTF_8));
+
+        // --- 2. one-shot rebuild script ---
+        String buildScript = Util.readResource("sources/rebuild_project.sh.template")
+                .replace("@JAR_NAME@", jarName)
+                .replace("@NATIVE_DIR@", nativeDir)
+                .replace("@LOADER_PACKAGE@", dotPackage);
+        Path buildScriptPath = outputDir.resolve("build.sh");
+        Files.write(buildScriptPath, buildScript.getBytes(StandardCharsets.UTF_8));
+        try {
+            buildScriptPath.toFile().setExecutable(true);
+        } catch (SecurityException ignored) {
+            // best-effort only
+        }
+
+        // --- 3. instructions ---
+        String readme = Util.readResource("sources/SOURCE_PROJECT.md.template")
+                .replace("@JAR_NAME@", jarName)
+                .replace("@NATIVE_DIR@", nativeDir)
+                .replace("@LOADER_PACKAGE@", dotPackage);
+        Files.write(outputDir.resolve("SOURCE_PROJECT.md"), readme.getBytes(StandardCharsets.UTF_8));
+
+        logger.info("Editable source project emitted to {} (java/{}/Loader.java)", outputDir, nativeDir);
     }
 }

@@ -1,0 +1,55 @@
+native-obfuscator (Extended Fork)
+=================================
+Copyright (C) radioegor146 and contributors
+Copyright (C) 2026 xiaofanforfabric (modifications)
+
+
+本作品基于以下上游项目:
+  native-obfuscator
+  https://github.com/radioegor146/native-obfuscator
+  Copyright (C) radioegor146 and contributors
+  授权: GNU General Public License v3.0
+
+上游原始作品的版权归原作者及贡献者所有,本仓库保留其全部原始版权声明。
+
+
+本地修改(Local modifications)
+-----------------------------
+本仓库在上游基础上做了修改,详见 MODIFICATIONS.md。
+
+  修改者        : xiaofanforfabric
+  首次修改日期  : 2026-09-16
+  修改内容摘要  : 新增输出「可自由修改的 Java + C++ 源工程」功能
+                  (NativeObfuscator.java 新增 emitSourceProject 方法)
+
+每一个被修改的源文件顶部都带有醒目的变更声明(符合 GPL-3.0 §5(a))。
+
+
+许可证(License)
+----------------
+本作品整体继续依据 GNU General Public License v3.0 授权。
+完整许可证文本见本仓库根目录的 LICENSE 文件。
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+
+对应源码获取方式(Source availability)
+-------------------------------------
+依据 GPL-3.0,任何接收本软件二进制形式的用户,都有权获得完整对应源码。
+分发二进制时,请同时提供以下之一:
+
+  1. 本仓库的公开可访问地址(推荐),或
+  2. 随二进制附带完整源码副本,或
+  3. 书面承诺在三年内提供源码的方式
+
+本项目源码: https://github.com/xiaofanforfabric/native-obfuscator
+
+上游原项目: https://github.com/radioegor146/native-obfuscator

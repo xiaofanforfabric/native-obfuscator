@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# 由 native-obfuscator 生成。
+#
+# 用途:
+#   1. 编译 cpp/ 目录下的 C++ 原生库
+#   2. 编译 java/ 目录下(可自由修改)的 Loader.java
+#   3. 将二者重新打包回输出 JAR
+#
+# 修改 java/@NATIVE_DIR@/Loader.java 或 cpp/ 下的任意源码后,直接运行本脚本即可。
+#
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# ---------------- 配置(由 native-obfuscator 生成,可自行修改) ----------------
+JAR_NAME="@JAR_NAME@"
+NATIVE_DIR="@NATIVE_DIR@"
+LOADER_PACKAGE="@LOADER_PACKAGE@"
+
+JAR_PATH="$ROOT/$JAR_NAME"
+JAVA_SRC="$ROOT/java/$NATIVE_DIR/Loader.java"
+CPP_DIR="$ROOT/cpp"
+
+if [ ! -f "$JAR_PATH" ]; then
+    echo "错误: 找不到输出 JAR: $JAR_PATH"
+    exit 1
+fi
+
+echo "[1/4] 编译 C++ 原生库 ..."
+cmake -S "$CPP_DIR" -B "$CPP_DIR/build" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$CPP_DIR/build" -j"$(nproc 2>/dev/null || echo 4)"
+
+LIB_FILE="$(find "$CPP_DIR/build" -type f \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) | head -n1)"
+if [ -z "${LIB_FILE}" ]; then
+    echo "错误: 未找到 C++ 编译产物 (*.so / *.dylib / *.dll)"
+    exit 1
+fi
+echo "      编译产物: $LIB_FILE"
+
+echo "[2/4] 计算原生库在 JAR 中的路径 ..."
+OS_NAME="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH_NAME="$(uname -m | tr '[:upper:]' '[:lower:]')"
+case "$ARCH_NAME" in
+    x86_64|amd64) PLATFORM_TYPE="x64" ;;
+    aarch64)      PLATFORM_TYPE="arm64" ;;
+    arm*)         PLATFORM_TYPE="arm32" ;;
+    i?86)         PLATFORM_TYPE="x86" ;;
+    *)            PLATFORM_TYPE="raw$ARCH_NAME" ;;
+esac
+case "$OS_NAME" in
+    linux*)                        OS_TYPE="linux.so" ;;
+    darwin*)                       OS_TYPE="macos.dylib" ;;
+    mingw*|msys*|cygwin*|windows*) OS_TYPE="windows.dll" ;;
+    *)                             OS_TYPE="raw$OS_NAME" ;;
+esac
+LIB_ENTRY="$NATIVE_DIR/$PLATFORM_TYPE-$OS_TYPE"
+echo "      原生库条目: $LIB_ENTRY"
+
+echo "[3/4] 编译 Loader.java ..."
+BUILD_CLASSES="$ROOT/java/build"
+rm -rf "$BUILD_CLASSES"
+mkdir -p "$BUILD_CLASSES"
+javac -d "$BUILD_CLASSES" "$JAVA_SRC"
+
+echo "[4/4] 打包进 JAR ..."
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+cp "$JAR_PATH" "$STAGE/out.jar"
+
+mkdir -p "$STAGE/lib/$NATIVE_DIR"
+cp "$LIB_FILE" "$STAGE/lib/$LIB_ENTRY"
+
+# 替换 JAR 中的 Loader.class
+jar uf "$STAGE/out.jar" -C "$BUILD_CLASSES" "$NATIVE_DIR/Loader.class"
+# 写入原生库
+jar uf "$STAGE/out.jar" -C "$STAGE/lib" "$LIB_ENTRY"
+
+mv "$STAGE/out.jar" "$JAR_PATH"
+
+echo "完成! 已更新: $JAR_PATH"

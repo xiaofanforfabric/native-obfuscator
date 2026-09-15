@@ -1,0 +1,60 @@
+# 可修改的 Java + C++ 源项目
+
+本目录由 **native-obfuscator** 生成,包含混淆后 JAR 的**完整可修改源码**。
+
+## 目录结构
+
+```
+.
+├── @JAR_NAME@                 # 混淆输出 JAR(执行入口)
+├── build.sh                   # 一键重新编译 + 打包脚本
+├── java/
+│   └── @NATIVE_DIR@/
+│       └── Loader.java        # 加载器源码(可自由修改)
+└── cpp/                       # 转译出的 C++ 原生代码
+    ├── CMakeLists.txt
+    ├── native_jvm.cpp/hpp
+    ├── native_jvm_output.cpp
+    ├── string_pool.cpp/hpp
+    └── output/               # 每个 Java 类对应的 .cpp/.hpp
+```
+
+## 使用方式
+
+1. 修改 `java/@NATIVE_DIR@/Loader.java`,和/或修改 `cpp/` 下的任意 C++ 源码。
+2. 运行一键脚本重新编译并打包:
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+脚本会依次:C++ 编译 → 计算原生库路径 → 编译 `Loader.java` → 更新输出 JAR。
+
+## 手动编译(可选)
+
+```bash
+# 编译 C++ 原生库
+cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build cpp/build -j
+
+# 编译 Loader.java
+javac -d java/build java/@NATIVE_DIR@/Loader.java
+
+# 更新 JAR(将原生库放入 @NATIVE_DIR@/<平台>-<类型>)
+jar uf @JAR_NAME@ -C java/build @NATIVE_DIR@/Loader.class
+```
+
+## 原生库命名规则
+
+加载器会在运行时按 OS/架构查找库,条目名格式为 `@NATIVE_DIR@/<平台类型>-<系统类型>`,例如:
+
+- Linux x64   → `@NATIVE_DIR@/x64-linux.so`
+- Windows x64 → `@NATIVE_DIR@/x64-windows.dll`
+- macOS arm64 → `@NATIVE_DIR@/arm64-macos.dylib`
+
+## 许可证
+
+`Loader.java` 与 `cpp/` 中的代码源自 **GPL 3.0** 授权的
+[radioegor146/native-obfuscator](https://github.com/radioegor146/native-obfuscator)。
+修改与再分发需遵循 GPL 3.0。
