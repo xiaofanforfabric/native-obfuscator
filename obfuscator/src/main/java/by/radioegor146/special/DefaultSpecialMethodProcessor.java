@@ -1,3 +1,30 @@
+/*
+ * Native Obfuscator - Translates JVM bytecode to C++ and compiles it into a native library.
+ * Copyright (C) 2018-2025  by.radioegor146
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * ---------------------------------------------------------------------------
+ * 本文件已被本地修改 / This file has been locally modified.
+ * 修改内容 / Modification:
+ *   修复 native 函数名拼接歧义导致的 C++ 重定义错误。
+ *   Fixed ambiguous native function name concatenation that produced duplicate
+ *   C++ definitions (see `preProcess` below for the full explanation).
+ * 详见 MODIFICATIONS.md / See MODIFICATIONS.md for details.
+ * ---------------------------------------------------------------------------
+ */
+
 package by.radioegor146.special;
 
 import by.radioegor146.MethodContext;
@@ -32,7 +59,30 @@ public class DefaultSpecialMethodProcessor implements SpecialMethodProcessor {
             return methodName;
         }
         context.method.access |= Opcodes.ACC_NATIVE;
-        return "native_" + context.method.name + context.methodIndex;
+        // === Local modification: fix ambiguous native function name (see MODIFICATIONS.md) ===
+        // Upstream (v3.5.4r) used:
+        //
+        //     return "native_" + context.method.name + context.methodIndex;
+        //
+        // This concatenates the method name and the method index without any
+        // separator, so the trailing digits of the name and the index become
+        // indistinguishable. `Util.escapeCppNameString` only rewrites
+        // non-alphanumeric characters (keeping `_` intact), so two distinct
+        // methods can produce the exact same C++ symbol and the generated
+        // `.cpp` then fails to compile with:
+        //
+        //     error: redefinition of 'void ...::__ngen_native_...'
+        //
+        // Real-world example (GrimAC Bukkit plugin,
+        // ac/grim/grimac/utils/blockplace/BlockPlaceResult):
+        //     index 9,  `lambda$static$77` -> "__ngen_native_lambdau36staticu36779"
+        //     index 79, `lambda$static$7`  -> "__ngen_native_lambdau36staticu36779"
+        //
+        // The `_` separator makes the mapping (name, index) -> symbol injective:
+        // the index is a pure digit sequence, so the substring after the last
+        // `_` always identifies the index unambiguously.
+        return "native_" + context.method.name + "_" + context.methodIndex;
+        // === End local modification ===
     }
 
     @Override

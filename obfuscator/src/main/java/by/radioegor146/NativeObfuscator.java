@@ -16,14 +16,27 @@
  *      2026-09-16
  *
  *  DESCRIPTION OF CHANGES / 修改内容:
- *      Added private method `emitSourceProject(...)` and a call to it, which
- *      additionally emits a fully editable Java + C++ source project next to
- *      the output JAR (editable Loader.java, build.sh, SOURCE_PROJECT.md).
- *      The original upstream processing flow is unchanged.
+ *      1. Added private method `emitSourceProject(...)` and a call to it, which
+ *         additionally emits a fully editable Java + C++ source project next to
+ *         the output JAR (editable Loader.java, build.sh, SOURCE_PROJECT.md).
  *
- *      新增私有方法 `emitSourceProject(...)` 及对其的调用,在输出 JAR 旁额外
- *      生成一套可自由修改的 Java + C++ 源工程(可编辑的 Loader.java、build.sh、
- *      SOURCE_PROJECT.md)。上游原有处理流程保持不变。
+ *      2. Removed the hardcoded `classNode.version = 52` downgrade. The class
+ *         file version of transpiled classes is now preserved by default and can
+ *         be forced via `setClassVersion(int)` / `--class-version`.
+ *         Upstream always forced major version 52 (Java 8), which makes HotSpot
+ *         silently ignore attributes introduced later than the requested version
+ *         (e.g. the `Record` attribute below major 60), breaking
+ *         `Class#isRecord()` and `Class#getRecordComponents()`.
+ *
+ *      1. 新增私有方法 `emitSourceProject(...)` 及对其的调用,在输出 JAR 旁额外
+ *         生成一套可自由修改的 Java + C++ 源工程(可编辑的 Loader.java、build.sh、
+ *         SOURCE_PROJECT.md)。
+ *
+ *      2. 移除硬编码的 `classNode.version = 52` 降级。转换后的类默认保留原始
+ *         class 文件版本,并可通过 `setClassVersion(int)` / `--class-version`
+ *         强制指定。上游始终强制 major 52(Java 8),而 HotSpot 会静默忽略晚于
+ *         该版本引入的属性(如 major < 60 的 `Record` 属性),导致
+ *         `Class#isRecord()` / `Class#getRecordComponents()` 失效。
  *
  *      See MODIFICATIONS.md in the repository root for the full change log.
  *      完整变更记录见仓库根目录 MODIFICATIONS.md。
@@ -119,6 +132,22 @@ public class NativeObfuscator {
     private int currentClassId;
     private String nativeDir;
 
+    /**
+     * Target class file <b>major</b> version for the classes written back to the output JAR.
+     * <p>
+     * A value of {@code <= 0} (the default) means <i>preserve the version read from the input
+     * class</i>. That is the correct behaviour for every input: a Java&nbsp;8 input still ends
+     * up as version {@code 52}, while a modern input keeps its own version and therefore keeps
+     * its modern attributes ({@code Record}, {@code PermittedSubclasses}, ...).
+     * <p>
+     * Upstream hardcoded {@code 52} here. Because HotSpot silently ignores attributes that were
+     * introduced after the requested class file version, that downgrade disabled the
+     * {@code Record} attribute below major version {@code 60} and thus made
+     * {@link Class#isRecord()} and {@link Class#getRecordComponents()} return {@code false} /
+     * {@code null} — while the attribute itself was still present in the class file.
+     */
+    private int targetClassVersion = -1;
+
     public NativeObfuscator() {
         stringPool = new StringPool();
         snippets = new Snippets(stringPool);
@@ -127,6 +156,40 @@ public class NativeObfuscator {
         cachedMethods = new NodeCache<>("(cmethods[%d])");
         cachedFields = new NodeCache<>("(cfields[%d])");
         methodProcessor = new MethodProcessor(this);
+    }
+
+    /**
+     * Forces every transpiled class to the given class file <b>major</b> version.
+     * <p>
+     * By default (never calling this method) the original version of each class is preserved,
+     * which is what virtually every user wants. Forcing a lower version is only useful when the
+     * output has to run on an older JVM — but note that HotSpot silently ignores attributes
+     * introduced after the requested version, so e.g. forcing {@code 52} (Java 8) will break
+     * {@link Class#isRecord()} and {@link Class#getRecordComponents()} on classes compiled with
+     * records.
+     * <p>
+     * The synthetic hidden classes (`nativeN/hidden/HiddenN`) are emitted with the highest
+     * version seen among the transpiled classes, or with the forced version when this method was
+     * called.
+     *
+     * @param classVersion class file major version, e.g. {@code 52} for Java 8, {@code 61} for
+     *                     Java 17, {@code 65} for Java 21. Values {@code <= 0} restore the
+     *                     default "preserve the original version" behaviour.
+     * @return {@code this}, so calls can be chained:
+     *         {@code new NativeObfuscator().setClassVersion(61).process(...)}
+     */
+    public NativeObfuscator setClassVersion(int classVersion) {
+        this.targetClassVersion = classVersion;
+        return this;
+    }
+
+    /**
+     * @return the forced class file major version, or {@code -1} when the original version of each
+     *         class is preserved (the default).
+     * @see #setClassVersion(int)
+     */
+    public int getClassVersion() {
+        return targetClassVersion;
     }
 
     public void process(Path inputJarPath, Path outputDir, List<Path> inputLibs,
@@ -316,7 +379,15 @@ public class NativeObfuscator {
                             ClassMethodFilter.cleanAnnotations(classNode);
                         }
 
-                        classNode.version = 52;
+                        // === Local modification: keep the original class file version ===
+                        // Upstream forced `classNode.version = 52` here, which silently disabled
+                        // every attribute introduced after Java 8 (e.g. `Record` below major 60).
+                        int effectiveClassVersion = targetClassVersion > 0
+                                ? targetClassVersion : classNode.version;
+                        classNode.version = effectiveClassVersion;
+                        hiddenMethodsPool.bumpClassVersion(effectiveClassVersion);
+                        // === End local modification ===
+
                         ClassWriter classWriter = new SafeClassWriter(metadataReader,
                                 ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
                         classNode.accept(classWriter);
@@ -338,6 +409,16 @@ public class NativeObfuscator {
                     logger.error("Error while processing {}", entry.getName(), ex);
                 }
             });
+
+            // === Local modification: resolve the class file version of the synthetic hidden classes ===
+            // Hidden classes are created lazily while classes are being processed, so the highest
+            // version is only known once every entry has been handled. Apply it just before emitting.
+            int hiddenClassVersion = targetClassVersion > 0
+                    ? targetClassVersion : hiddenMethodsPool.getClassVersion();
+            for (ClassNode hiddenClass : hiddenMethodsPool.getClasses()) {
+                hiddenClass.version = hiddenClassVersion;
+            }
+            // === End local modification ===
 
             if (platform == Platform.ANDROID) {
                 for (ClassNode hiddenClass : hiddenMethodsPool.getClasses()) {

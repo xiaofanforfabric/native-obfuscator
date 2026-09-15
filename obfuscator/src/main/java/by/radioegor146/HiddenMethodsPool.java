@@ -1,3 +1,37 @@
+/*
+ * ============================================================================
+ *  MODIFIED FILE / 已修改文件
+ * ============================================================================
+ *
+ *  This file is part of native-obfuscator, which is licensed under the
+ *  GNU General Public License v3.0 (see the LICENSE file in the repository root).
+ *
+ *  本文件属于 native-obfuscator 项目,依据 GNU GPL v3.0 授权
+ *  (见仓库根目录 LICENSE 文件)。
+ *
+ *  MODIFIED BY / 修改者:
+ *      xiaofanforfabric
+ *
+ *  MODIFICATION DATE / 修改日期:
+ *      2026-09-16
+ *
+ *  DESCRIPTION OF CHANGES / 修改内容:
+ *      The synthetic hidden classes are no longer hardcoded to class file major
+ *      version 52. They now follow the highest version seen among the transpiled
+ *      classes, so that they can reference them without a version downgrade.
+ *
+ *      合成隐藏类不再硬编码为 class 文件 major 版本 52,而是跟随被转换类中出现
+ *      的最高版本,以便在不降级的前提下引用它们。
+ *
+ *      See MODIFICATIONS.md in the repository root for the full change log.
+ *      完整变更记录见仓库根目录 MODIFICATIONS.md。
+ *
+ *  ORIGINAL WORK / 原始作品:
+ *      Copyright (C) radioegor146 and contributors
+ *      https://github.com/radioegor146/native-obfuscator
+ * ============================================================================
+ */
+
 package by.radioegor146;
 
 import org.objectweb.asm.Opcodes;
@@ -14,8 +48,38 @@ public class HiddenMethodsPool {
 
     private final String baseName;
 
+    /**
+     * Class file <b>major</b> version used for the synthetic hidden classes. It is raised to the
+     * highest version seen among the transpiled classes, so a hidden class is never emitted with a
+     * version lower than the classes it has to reference.
+     * <p>
+     * Upstream hardcoded {@code 52} at the point of use; {@code NativeObfuscator} did the same for
+     * the transpiled classes themselves.
+     */
+    private int classVersion = Opcodes.V1_8;
+
     public HiddenMethodsPool(String baseName) {
         this.baseName = baseName;
+    }
+
+    /**
+     * Raises the class file version used for synthetic hidden classes. Never lowers it, so the
+     * result is the maximum of every version passed in.
+     *
+     * @param version class file major version of a transpiled class
+     */
+    public void bumpClassVersion(int version) {
+        if (version > classVersion) {
+            classVersion = version;
+        }
+    }
+
+    /**
+     * @return the highest class file major version seen so far; never below
+     *         {@code 52} ({@link Opcodes#V1_8}).
+     */
+    public int getClassVersion() {
+        return classVersion;
     }
 
     private final HashMap<String, Integer> namePool = new HashMap<>();
@@ -55,7 +119,7 @@ public class HiddenMethodsPool {
         if (classNode == null) {
             classNode = new ClassNode(Opcodes.ASM9);
             classNode.access = Opcodes.ACC_PUBLIC;
-            classNode.version = 52;
+            classNode.version = classVersion;
             classNode.name = baseName + "/Hidden" + classes.size();
             classNode.superName = Type.getInternalName(Object.class);
             classes.add(classNode);

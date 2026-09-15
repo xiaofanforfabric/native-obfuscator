@@ -1,3 +1,37 @@
+/*
+ * ============================================================================
+ *  MODIFIED FILE / 已修改文件
+ * ============================================================================
+ *
+ *  This file is part of native-obfuscator, which is licensed under the
+ *  GNU General Public License v3.0 (see the LICENSE file in the repository root).
+ *
+ *  本文件属于 native-obfuscator 项目,依据 GNU GPL v3.0 授权
+ *  (见仓库根目录 LICENSE 文件)。
+ *
+ *  MODIFIED BY / 修改者:
+ *      xiaofanforfabric
+ *
+ *  MODIFICATION DATE / 修改日期:
+ *      2026-09-16
+ *
+ *  DESCRIPTION OF CHANGES / 修改内容:
+ *      Added the `--class-version` option, which forwards to
+ *      `NativeObfuscator#setClassVersion(int)`. When omitted, the original class
+ *      file version of each class is preserved (upstream always forced 52).
+ *
+ *      新增 `--class-version` 选项,转调 `NativeObfuscator#setClassVersion(int)`。
+ *      不指定时保留各类的原始 class 文件版本(上游始终强制 52)。
+ *
+ *      See MODIFICATIONS.md in the repository root for the full change log.
+ *      完整变更记录见仓库根目录 MODIFICATIONS.md。
+ *
+ *  ORIGINAL WORK / 原始作品:
+ *      Copyright (C) radioegor146 and contributors
+ *      https://github.com/radioegor146/native-obfuscator
+ * ============================================================================
+ */
+
 package by.radioegor146;
 
 import picocli.CommandLine;
@@ -52,6 +86,18 @@ public class Main {
         @CommandLine.Option(names = {"--debug"}, description = "Enable generation of debug .jar file (non-executable)")
         private boolean generateDebugJar;
 
+        @CommandLine.Option(names = {"--class-version"}, paramLabel = "<version>",
+                converter = ClassVersionConverter.class,
+                description = {
+                        "Class file version to write for the transpiled classes.",
+                        "Accepts a class file major version (>= 45, e.g. 52 = Java 8, 61 = Java 17, 65 = Java 21)",
+                        "or a Java release number (<= 44, e.g. 8, 11, 17, 21).",
+                        "Default: preserve the original version of each class.",
+                        "Note: forcing a version lower than the input makes HotSpot silently ignore",
+                        "attributes introduced later (e.g. Record below major 60 breaks Class#isRecord())."
+                })
+        private Integer classVersion;
+
         @Override
         public Integer call() throws Exception {
             List<Path> libs = new ArrayList<>();
@@ -71,10 +117,44 @@ public class Main {
                 whiteList = Files.readAllLines(whiteListFile.toPath(), StandardCharsets.UTF_8);
             }
 
-            new NativeObfuscator().process(jarFile.toPath(), Paths.get(outputDirectory),
+            NativeObfuscator obfuscator = new NativeObfuscator();
+            if (classVersion != null) {
+                obfuscator.setClassVersion(classVersion);
+            }
+
+            obfuscator.process(jarFile.toPath(), Paths.get(outputDirectory),
                     libs, blackList, whiteList, libraryName, customLibraryDirectory, platform, useAnnotations, generateDebugJar);
 
             return 0;
+        }
+    }
+
+    /**
+     * Converts a user supplied {@code --class-version} value into a class file major version.
+     * <p>
+     * Class file major versions start at {@code 45} (Java 1.1), while today's Java release
+     * numbers are far below that, so the two ranges never overlap: values below {@code 45} are
+     * read as release numbers ({@code 8} -&gt; {@code 52}, {@code 17} -&gt; {@code 61}) and values
+     * of {@code 45} and above are read as raw major versions.
+     * <p>
+     * Implementing this as a picocli converter (instead of validating inside {@code call()})
+     * means a bad value is reported as a normal usage error rather than as a stack trace.
+     */
+    static class ClassVersionConverter implements CommandLine.ITypeConverter<Integer> {
+
+        @Override
+        public Integer convert(String value) {
+            int parsed;
+            try {
+                parsed = Integer.parseInt(value.trim());
+            } catch (NumberFormatException ex) {
+                throw new CommandLine.TypeConversionException("'" + value + "' is not a number "
+                        + "(expected a Java release number like 17, or a class file major version like 61)");
+            }
+            if (parsed <= 0) {
+                throw new CommandLine.TypeConversionException("must be a positive number, got " + parsed);
+            }
+            return parsed < 45 ? parsed + 44 : parsed;
         }
     }
 
