@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 #
-# 由 native-obfuscator 生成。
+# 由 native-obfuscator(扩展分支)生成。
+#
+# 工具来源 / Fork 关系:
+#   上游原项目 : https://github.com/radioegor146/native-obfuscator
+#                原作者 radioegor146 and contributors
+#   本 Fork    : https://github.com/xiaofanforfabric/native-obfuscator
+#                维护者 xiaofanforfabric
+#   许可证     : GNU GPL v3.0(与上游一致)
 #
 # 用途:
 #   1. 编译 cpp/ 目录下的 C++ 原生库

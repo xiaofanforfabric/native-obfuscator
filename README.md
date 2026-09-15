@@ -1,6 +1,52 @@
 # native-obfuscator
 Java .class to .cpp converter for use with JNI
 
+---
+
+> ## 🔀 关于本仓库(About this repository)
+>
+> **这是一个 Fork,不是上游原项目。**
+>
+> | | |
+> |---|---|
+> | **上游原项目** | [radioegor146/native-obfuscator](https://github.com/radioegor146/native-obfuscator) |
+> | **原作者** | radioegor146 and contributors |
+> | **本 Fork** | [xiaofanforfabric/native-obfuscator](https://github.com/xiaofanforfabric/native-obfuscator) |
+> | **本 Fork 维护者** | xiaofanforfabric |
+> | **基线版本** | v3.5.4r |
+> | **许可证** | GNU GPL v3.0(与上游一致) |
+>
+> ### 本 Fork 相对上游新增了什么?
+>
+> **输出可自由修改的 Java + C++ 源工程**(新增功能,完全向后兼容)。
+>
+> 上游只把加载器以编译后的 `Loader.class`(黑盒)写进输出 JAR,无法修改。
+> 本 Fork 在此基础上**额外**输出一套完整、可自由编辑的源码工程:
+>
+> ```
+> output/
+> ├── <jarName>                    # 混淆后的 JAR(与上游一致)
+> ├── build.sh                     # 一键: 编译C++ + 编译Loader.java + 重新打包
+> ├── SOURCE_PROJECT.md            # 使用说明
+> ├── java/nativeN/Loader.java     # 可自由修改的加载器源码
+> └── cpp/                         # 转译出的 C++ 源码(上游已有)
+> ```
+>
+> **原有 JAR 输出流程未做任何改动**,因此本 Fork 与上游在行为上完全兼容。
+>
+> ### 变更与许可
+>
+> - 详细的变更记录、GPL-3.0 合规说明见 [`MODIFICATIONS.md`](MODIFICATIONS.md)
+> - 版权归属与源码获取方式见 [`NOTICE`](NOTICE)
+> - 本 Fork 继续以 **GPL-3.0** 授权,任何修改与分发均需遵循该许可证
+> - 上游原始作品的版权归原作者及贡献者所有,本 Fork 保留其全部原始版权声明
+>
+> ---
+>
+> 以下为上游原始 README 内容(用于说明本工具的基础功能)。
+
+---
+
 Currently, fully supports only Java 8. Java 9+ and Android support is entirely experimental
 
 Warning: blacklist/whitelist usage is recommended because this tool slows down code significantly (like do not obfuscate full Minecraft .jar)
@@ -166,8 +212,20 @@ This tool uses tests from [huzpsb/JavaObfuscatorTest](https://github.com/huzpsb/
 
 ---
 
-In case of any problems, feel free to open an issue or contact me at [re146.dev](https://re146.dev)
+---
 
-### Stargazers over time
+## 📌 联系与反馈(本 Fork)
+
+> 下面这部分**已被本 Fork 改写**,不再指向上游作者。
+
+- **本 Fork Issues**(报告本 Fork 引入的问题、请求新功能):
+  https://github.com/xiaofanforfabric/native-obfuscator/issues
+- **上游项目 Issues**(报告与本工具底层转译相关的问题):
+  https://github.com/radioegor146/native-obfuscator/issues
+- **上游作者联系方式**: [re146.dev](https://re146.dev)(仅限上游原项目)
+
+> ⚠️ 请勿就本 Fork 引入的改动(如「输出可修改源工程」)去打扰上游作者。
+
+### 上游 Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/radioegor146/native-obfuscator.svg?variant=adaptive)](https://starchart.cc/radioegor146/native-obfuscator)

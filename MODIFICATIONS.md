@@ -3,6 +3,44 @@
 本仓库是 [radioegor146/native-obfuscator](https://github.com/radioegor146/native-obfuscator) 的一个开源扩展分支,
 以 GPL-3.0 授权,可自由使用、修改与再分发。
 
+## Fork 关系(Fork Relationship)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  上游原项目 (Upstream / Original)                               │
+│                                                                 │
+│    native-obfuscator                                            │
+│    https://github.com/radioegor146/native-obfuscator            │
+│                                                                 │
+│    作者      : radioegor146 and contributors                    │
+│    版本      : v3.5.4r                                          │
+│    许可证    : GNU GPL v3.0                                     │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            │  fork (2026-09-16)
+                            │  分叉自上述提交: e481761
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  本 Fork (This Fork)                                            │
+│                                                                 │
+│    native-obfuscator (Extended Fork)                            │
+│    https://github.com/xiaofanforfabric/native-obfuscator        │
+│                                                                 │
+│    维护者    : xiaofanforfabric                                 │
+│    基线      : v3.5.4r                                          │
+│    许可证    : GNU GPL v3.0 (与上游一致)                        │
+│                                                                 │
+│    相对上游新增:                                                │
+│      ★ 输出可自由修改的 Java + C++ 源工程                       │
+│      ★ GPL-3.0 合规材料 (NOTICE / MODIFICATIONS.md)            │
+│      ★ 行为与上游完全兼容,原有输出流程未改动                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+> **本 Fork 与上游的关系**:本仓库是上游的**派生作品(derivative work)**,
+> 保留了上游全部原始版权声明,并**额外**增加了上述新功能。
+> 本仓库**不是**上游官方仓库,上游作者**不对**本 Fork 的改动负责。
+
 ## 原始项目信息
 
 - **原作者**: radioegor146

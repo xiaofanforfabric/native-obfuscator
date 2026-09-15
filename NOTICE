@@ -4,12 +4,23 @@ Copyright (C) radioegor146 and contributors
 Copyright (C) 2026 xiaofanforfabric (modifications)
 
 
-本作品基于以下上游项目:
-  native-obfuscator
-  https://github.com/radioegor146/native-obfuscator
-  Copyright (C) radioegor146 and contributors
-  授权: GNU General Public License v3.0
+Fork 关系(Fork relationship)
+-----------------------------
+本软件是上游项目 native-obfuscator 的一个派生作品(Fork):
 
+  上游原项目 (Upstream):
+    native-obfuscator
+    https://github.com/radioegor146/native-obfuscator
+    Copyright (C) radioegor146 and contributors
+    授权: GNU General Public License v3.0
+
+  本 Fork (This Fork):
+    native-obfuscator (Extended Fork)
+    https://github.com/xiaofanforfabric/native-obfuscator
+    Copyright (C) 2026 xiaofanforfabric (modifications)
+    授权: GNU General Public License v3.0 (与上游一致)
+
+本仓库不是上游官方仓库,上游作者不对本 Fork 的改动负责。
 上游原始作品的版权归原作者及贡献者所有,本仓库保留其全部原始版权声明。
 
 
