@@ -10,7 +10,7 @@
 > | 原作者 | radioegor146 and contributors |
 > | 本 Fork | [xiaofanforfabric/native-obfuscator](https://github.com/xiaofanforfabric/native-obfuscator) |
 > | 本 Fork 维护者 | xiaofanforfabric |
-> | 基线版本 | v3.5.4r |
+> | 基线版本 | v3.5.5r |
 > | 许可证 | GNU GPL v3.0(与上游一致) |
 >
 > 上游原本只输出编译好的 `Loader.class`(黑盒,不可修改);

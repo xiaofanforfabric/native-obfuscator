@@ -194,6 +194,43 @@ bash scripts/repro-ki4.sh obfuscator/build/libs/obfuscator.jar   # 双插件 boo
 
 ### 已实施的修改
 
+#### v1.4.5 - 2026-09-17 - 版本号改为跟随本 Fork 的发布标签
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**问题**: `--version` / `-V` 参数虽然存在,但值来自 `Main.java` 里硬编码的
+`VERSION = "3.5.4r"`,而上游从 3.5.4r 之后就没再更新过这个字符串(发 3.5.5r 时也没改)。
+结果是**任何两个版本的 jar 都印同一个版本号**,无法据此判断手上这份是不是最新:
+
+```
+上游原版   2,762,655 字节   --version → native-obfuscator 3.5.4r
+Fork 构建  2,804,946 字节   --version → native-obfuscator 3.5.4r
+```
+
+另注:jar 内既无 `Implementation-Version`(MANIFEST),也无本项目自己的
+`META-INF/maven/.../pom.properties`,所以当时没有别的地方能读到版本。
+
+**改动**:
+
+- `Main.java` —— `VERSION` 由 `"3.5.4r"` 改为 `"1.4.5"`,并补注释说明它
+  **必须与发布用的 git 标签一致**(标签 `v1.4.5` ↔ 常量 `1.4.5`)。
+- `resources/sources/SOURCE_PROJECT.md.template` —— 输给用户的 `SOURCE_PROJECT.md`
+  里「基线版本」仍写着 `v3.5.4r`,同步为 `v3.5.5r`(v1.4.4 合并上游时漏改)。
+- 本条目。
+
+**为什么这样能解决问题**: Release 的 `tag_name` 是权威且可靠的
+(`releases/latest` 返回 `v1.4.5`),现在本地 jar 的 `--version` 也会报告同一版本号,
+AntiHackerX 只要两边对比就能判断是否需要更新。
+
+> ⚠️ 对比时注意归一化:标签是 `v1.4.5`,而 `--version` 输出
+> `native-obfuscator 1.4.5`(无 `v` 前缀),需去掉前缀再比。
+
+**待办(本次未做)**: `SOURCE_PROJECT.md.template` 的「许可证与归属」一节仍写着
+「修改与再分发需遵循 GNU GPL v3.0」,这在 Output Exception 合入后已**低估了用户权利**
+—— 该例外明确允许把工具输出的 runtime 代码以任意条款分发。建议下个版本修正措辞,
+但属于法律表述,需要先确认例外是否也覆盖本 Fork 额外输出的 `build.sh` 与本文件自身。
+
 #### v1.4.4 - 2026-09-17 - 同步上游 master;解除 Gradle 8.14.2 pin
 
 **修改者**: xiaofanforfabric
@@ -516,7 +553,7 @@ java -jar native-obfuscator.jar input.jar output/ -p hotspot --class-version 17
 
 测试素材为本地 Java 17 特性矩阵工程(record / sealed interface / 嵌套类 / 接口私有方法 /
 switch 表达式 / 模式匹配 instanceof / text block / var / lambda / 匿名类),
-`javac` 编译基线为 **major version 61**。`Main` 末尾打印 `Class#isRecord()` 的结果,
+`javac` 编译基线为 **major version 61**。`VerifyMain` 末尾打印 `Class#isRecord()` 的结果,
 作为"版本是否被降级"的探针。
 
 输出 JAR 中的 class 版本(`native0/Loader.class` 恒为 52,它是工具自带的加载器,

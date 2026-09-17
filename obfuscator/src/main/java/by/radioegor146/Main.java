@@ -49,7 +49,18 @@ import java.util.concurrent.Callable;
 
 public class Main {
 
-    private static final String VERSION = "3.5.4r";
+    /**
+     * 工具版本号。
+     *
+     * <p>⚠️ 必须与发布用的 git 标签保持一致:标签形如 <code>v1.4.5</code>,
+     * 这里写 <code>1.4.5</code>(无 <code>v</code> 前缀)。AntiHackerX 通过对比本字符串
+     * 与 GitHub <code>releases/latest</code> 的 <code>tag_name</code> 来判断本地依赖
+     * 是否过期,所以发标签前记得同步改这里。</p>
+     *
+     * <p>上游原本填的是它自己的版本号(3.5.4r),而且发新版时常常忘记更新;
+     * 本 Fork 改为跟随自己的标签,以便自动检测更新。</p>
+     */
+    private static final String VERSION = "1.4.5";
 
     @CommandLine.Command(name = "native-obfuscator", mixinStandardHelpOptions = true, version = "native-obfuscator " + VERSION,
             description = "Transpiles .jar file into .cpp files and generates output .jar file")
