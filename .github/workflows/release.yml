@@ -14,9 +14,10 @@
 #    - SHA256SUMS.txt                    产物校验和
 #
 #  说明:
-#    - 需要 Gradle 8.14.2:shadow 插件 8.1.1 与 Gradle 9.x 不兼容
-#      (错误: Could not add META-INF to ZIP)。本仓库的 wrapper 已固定在
-#      8.14.2,因此这里直接走 ./gradlew,同时也等于在 CI 里守住这个约束。
+#    - Gradle 版本由 gradle/wrapper/gradle-wrapper.properties 固定,这里直接
+#      走 ./gradlew,不额外指定。当前为 9.3.1(与上游一致)。
+#      (历史:曾因 shadow 插件 8.1.1 与 Gradle 9.x 不兼容而固定 8.14.2;
+#      上游合入 shadow 修复 PR #103 后已解除,详见 MODIFICATIONS.md v1.4.4。)
 #    - 只构建 :obfuscator:shadowJar,不跑测试套件(测试需要额外安装 Krakatau)。
 #
 #  ⚠️ 注意:本仓库保留了上游的大量历史标签(1.2b ... 3.5.4r)。
@@ -51,8 +52,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # 必须 8.14.2:shadow 插件 8.1.1 不兼容 Gradle 9.x
-  GRADLE_VERSION: '8.14.2'
+  # 与 wrapper 保持一致。Gradle 9.3.1 要求用 JVM 17~25 运行,17 在范围内。
+  GRADLE_VERSION: '9.3.1'
   JAVA_VERSION: '17'
 
 jobs:

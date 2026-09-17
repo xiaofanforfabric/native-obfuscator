@@ -6,15 +6,19 @@ name: Main pipeline
 # 它和上游 radioegor146/native-obfuscator 的 main.yml 有三处**故意**的差异,
 # 因为上游那份配置直接拿到本仓库来跑必定全红:
 #
-# 1) 矩阵里没有 JDK 25。
-#    本仓库 gradle/wrapper 固定 Gradle 8.14.2 —— shadow 插件 8.1.1 和 Gradle
-#    9.x 不兼容,所以升不上去。而 Gradle 8.14.2 官方只支持用 **JDK 8~24** 运行:
-#      "A JVM version between 8 and 24 is required to execute Gradle.
-#       JVM 25 and later versions are not yet supported."
-#    https://docs.gradle.org/8.14.2/userguide/compatibility.html
-#    带上 JDK 25 会让那个 job 在 ./gradlew 启动阶段直接失败,再叠加上游没关的
-#    fail-fast,结果就是「1 个 job 真失败 + 其余 14 个被 cancel」,看上去像
-#    15 个 job 一起炸了。
+# 1) 矩阵是 [17, 21, 25],不是上游的 [8, 11, 17, 21, 25]。
+#    Gradle 9.3.1 要求用 **JVM 17~25** 才能执行 Gradle 本身:
+#      "A JVM version between 17 and 25 is required to execute Gradle."
+#    https://docs.gradle.org/9.3.1/userguide/compatibility.html
+#    同一张兼容表里,JDK 8 和 JDK 11 的 "Support for running Gradle" 只到
+#    8.14.x,所以在 wrapper 固定在 9.3.1 的前提下这两项必定在 `./gradlew`
+#    启动阶段就失败 —— 不是代码有问题。
+#    这不是本仓库特有的现象:上游当前的 CI 正是这样红的。实测 run
+#    35110882936(commit b3b3a40),15 个 job 里只有「JDK 11 on ubuntu-latest」
+#    真的失败,其余 14 个被 fail-fast 连坐 cancel。
+#    历史:本仓库曾把 wrapper 降回 Gradle 8.14.2 以绕开 shadow 插件不兼容
+#    问题,从而还能用 JDK 8/11;上游合入 shadow 修复(PR #103)之后这个绕道
+#    已无必要,详见 MODIFICATIONS.md 的 v1.4.4。
 #
 # 2) 只在 ubuntu-latest 上跑。
 #    - windows-latest:上游用 VS2019 Enterprise 的 vcvars64.bat 初始化 MSVC,
@@ -53,7 +57,7 @@ jobs:
       # cancel,屏幕上只剩一片红,根本看不出到底有几个 JDK 真的有问题。
       fail-fast: false
       matrix:
-        java: [8, 11, 17, 21]
+        java: [17, 21, 25]
     steps:
       - uses: actions/checkout@v5
 
@@ -68,20 +72,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++ cmake
 
-      # JDK 8 上只验证「源码仍然只用 Java 8 的语法」:shadow 8.1.1 自己需要
-      # JDK 11+ 才能运行 Gradle,所以在 JDK 8 上打不出 fat jar。
-      # 但这一项恰恰是唯一能拦住「误用 Java 9+ 新 API」的矩阵项 ——
-      # targetCompatibility=1.8 只约束字节码版本,并不检查 API 是否存在于 JDK 8。
-      - name: Build (JDK 8, compile only)
-        if: matrix.java == 8
-        run: ./gradlew :annotations:compileJava :obfuscator:compileJava --console=plain
-
+      # 注:原来这里有一项「JDK 8,只编译不打包」的矩阵项,用来拦住「误用
+      # Java 9+ 新 API」—— 因为 targetCompatibility=1.8 只约束字节码版本,
+      # 并不检查 API 是否存在于 JDK 8。Gradle 9.3.1 无法运行在 JDK 8 上,
+      # 因此该项已移除。如需恢复这种静态检查,正确做法是在 build.gradle 里
+      # 改用 `options.release = 8`(javac `--release 8` 会对照 Java 8 的 API
+      # 签名),这样在 JDK 17+ 上也能生效,不需要装 JDK 8。
       - name: Build (shadowJar)
-        if: matrix.java != 8
         run: ./gradlew :obfuscator:shadowJar --console=plain
 
       - name: Smoke test (--version)
-        if: matrix.java != 8
         run: |
           set -euo pipefail
           JAR=$(ls obfuscator/build/libs/*.jar | head -n 1)

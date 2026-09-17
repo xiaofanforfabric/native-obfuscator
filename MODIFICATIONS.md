@@ -27,12 +27,12 @@
 │    https://github.com/xiaofanforfabric/native-obfuscator        │
 │                                                                 │
 │    维护者    : xiaofanforfabric                                 │
-│    基线      : v3.5.4r                                          │
+│    基线      : v3.5.5r                                          │
 │    许可证    : GNU GPL v3.0 (与上游一致)                        │
 │                                                                 │
 │    相对上游新增:                                                │
 │      ★ 输出可自由修改的 Java + C++ 源工程                       │
-│      ★ 修复构建:Gradle 版本降回 8.14.2 (上游 9.x 无法构建)      │
+│      ★ 构建可用:同步上游 Gradle 9 修复 (v1.4.4)                 │
 │      ★ 标签自动发布 GitHub Release                              │
 │      ★ GPL-3.0 合规材料 (NOTICE / MODIFICATIONS.md)             │
 │      ★ KNOWN_ISSUES.md:记录并规避上游遗留缺陷                   │
@@ -193,6 +193,62 @@ bash scripts/repro-ki4.sh obfuscator/build/libs/obfuscator.jar   # 双插件 boo
    > 这些修复会**改变 `classIndex` 分配**,属于破坏性变更,需要单独一个版本发布。
 
 ### 已实施的修改
+
+#### v1.4.4 - 2026-09-17 - 同步上游 master;解除 Gradle 8.14.2 pin
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**背景**: 上游合入了本仓库提交的两个 PR,并发布了 `3.5.5r`。
+
+- **PR #103**(本仓库提交):修复 `shadowJar` 在 Gradle 9 下的构建失败
+  (`com.github.johnrengelman.shadow` 8.1.1 → `com.gradleup.shadow` 9.6.1)。
+- **PR #104**(本仓库提交):把 Output Exception 声明写进会被逐字复制到用户
+  输出目录的 4 个 runtime 文件(`native_jvm.*`、`native_jvm_output.hpp`、
+  `string_pool.hpp`),使下游审计时能看到例外的存在。
+- **PR #102**(第三方 `utafrali`,源自 issue #101):在 `LICENSE` 中加入
+  Output Exception —— 允许把工具**发出的** runtime 代码以任意条款链接、
+  嵌入、编译、分发;工具本身仍是完整 GPL-3.0。
+
+**本仓库本次改动**:
+
+- 合并 `upstream/master`(`b3b3a40` / `3.5.5r`)。
+  - `README.md` 尾部有 1 处冲突:上游新增 `### Licensing` 段,本仓库原有
+    「📌 联系与反馈(本 Fork)」段。两边都保留。
+  - 其余文件(`LICENSE`、`obfuscator/build.gradle`、4 个 runtime 文件)
+    全部自动合并,无冲突。
+- `gradle/wrapper/gradle-wrapper.properties` —— **解除 v1.3.0 引入的
+  8.14.2 pin**,回到上游的 `gradle-9.3.1-all.zip`。
+  - 依据:该 pin 存在的唯一理由是「shadow 8.1.1 与 Gradle 9.x 不兼容」,
+    而这正是上游 PR #103 修掉的问题。
+  - 实测:保留 pin 而合并上游的结果是构建直接失败 ——
+    ```
+    'void org.gradle.api.component.AdhocComponentWithVariants
+            .addVariantsFromConfiguration(Provider, Action)'
+    ```
+    (`com.gradleup.shadow` 9.x 依赖只有 Gradle 9 才提供的 API。)
+- `.github/workflows/main.yml` —— JDK 矩阵从 `[8, 11, 17, 21]` 改为
+  `[17, 21, 25]`。
+  - 依据:Gradle 9.3.1 要求用 **JVM 17~25** 执行 Gradle 本身
+    (<https://docs.gradle.org/9.3.1/userguide/compatibility.html>);
+    JDK 8/11 对应的 "Support for running Gradle" 只到 8.14.x。
+  - 顺带把 JDK 25 加了回来 —— 旧矩阵去掉它的原因(Gradle 8.14.2 不支持
+    JVM 25)已随 pin 一起消失。
+  - 原来那项「JDK 8,只编译不打包」的静态检查(用于拦截误用 Java 9+ 新 API)
+    已随 JDK 8 一起移除;要恢复应改用 `options.release = 8`,不必装 JDK 8。
+- `.github/workflows/release.yml` —— `GRADLE_VERSION` 8.14.2 → 9.3.1,
+  并更新相关注释。
+- `MODIFICATIONS.md` —— 本条目;`### 环境要求` 同步更新。
+
+**验证**: 本地 `./gradlew clean :obfuscator:shadowJar` 构建通过;
+`java -jar obfuscator.jar --version` 输出正常;并用 `-a` 注解模式实测
+`@Native` / `@NotNative` 仍被正确识别(`@Native` 类的方法变成 `native`,
+`@NotNative` 的方法保留在 Java 层)。
+
+**上游现状备注**(与本仓库无关,仅作记录):上游 CI 目前是红的。实测 run
+`35110882936`(commit `b3b3a40`):15 个 job 中只有「JDK 11 on
+ubuntu-latest」真的失败,其余 14 个被 fail-fast 连坐 cancel。根因就是上面
+那条 —— `5cf558a` 升 wrapper 到 9.x 时没有同步调整矩阵。
 
 #### v1.4.3 - 2026-09-16 - CI:重新引入精简版 `main.yml`
 
@@ -606,14 +662,21 @@ output/
 
 ### 环境要求
 
-- **JDK 17**(CI 与本地验证所用版本;源码 target 为 Java 1.8)
-- **Gradle 8.14.2** —— 由 `gradle/wrapper/gradle-wrapper.properties` 固定,
+- **JDK 17**(CI 与本地验证所用版本;源码 target 为 Java 1.8)。
+  注意:执行 Gradle 本身需要 **JVM 17~25**,JDK 8/11 不行(见下方说明)。
+- **Gradle 9.3.1** —— 由 `gradle/wrapper/gradle-wrapper.properties` 固定,
   直接用 `./gradlew` 即可,无需自行安装
 - CMake 3.x (用于 C++ 编译)
 - C++ 编译器 (GCC/Clang/MSVC)
 
-> ⚠️ 不要使用 Gradle 9.x。`shadow` 插件 8.1.1 与 Gradle 9 不兼容,会导致
-> `:obfuscator:shadowJar` 报 `Could not add META-INF to ZIP`。
+> 📖 这件事的经过:上游 `5cf558a` 把 wrapper 升到 Gradle 9.3.1,却没有同步
+> 更换 shadow 插件(仍是 8.1.1),导致构建必挂(`Could not add META-INF to
+> ZIP` / `No such property: mode`)。本仓库当时只能把 wrapper 降回 8.14.2
+> 绕过。该问题现已由上游合入 **PR #103**(迁移到 `com.gradleup.shadow`)
+> 修复,v1.4.4 起本仓库直接用上游版本,不再 pin。
+>
+> ⚠️ 反过来注意:一旦用 Gradle 9.x,**JDK 8 和 JDK 11 就跑不了 Gradle 了**
+> (兼容表里它们的 "Support for running Gradle" 只到 8.14.x)。
 
 ### 构建步骤
 
