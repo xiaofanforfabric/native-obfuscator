@@ -291,6 +291,19 @@ This tool uses tests from [huzpsb/JavaObfuscatorTest](https://github.com/huzpsb/
 
 ---
 
+### Licensing
+
+The tool itself is licensed under [GPL-3.0](LICENSE).
+
+**Output exception:** the runtime files emitted by the tool into your output
+directory -- `native_jvm.*`, `string_pool.hpp`, the generated Loader class,
+and all code fragments from `cppsnippets.properties` -- may be linked,
+embedded, compiled, and distributed in your own programs under terms of your
+choice, regardless of GPL-3.0 section 5(c). See the Output Exception in
+[LICENSE](LICENSE) for the full terms.
+
+---
+
 ## 📌 联系与反馈(本 Fork)
 
 > 下面这部分**已被本 Fork 改写**,不再指向上游作者。
