@@ -194,6 +194,41 @@ bash scripts/repro-ki4.sh obfuscator/build/libs/obfuscator.jar   # 双插件 boo
 
 ### 已实施的修改
 
+#### v1.4.7 - 2026-09-17 - 输给客户的 SOURCE_PROJECT.md 不再报基线版本号
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**背景**: 版本号是对抗逆向时最敏感的信息 —— 逆向者一旦在目标程序里看到
+「某某工具 1.2.3」,就能直接去找对应版本的一键脱壳脚本,连工具链都不用猜。
+
+**核查结果(实测)**: native-obfuscator **本身不往产物里写任何版本号**。
+把测试用例完整加壳(含 C++ 编译)后,对最终 JAR 与 `.so` 做指纹扫描:
+
+```
+native-obfuscator  → 0 命中
+radioegor146       → 0 命中
+xiaofanforfabric   → 0 命中
+1.0.0 / 3.5.x      → 0 命中
+```
+
+原因是版本号与文件名都只出现在**注释**里,注释不进二进制。所以对抗面本身是干净的。
+
+**改动**: 唯一会跟着产物走的版本号是 `SOURCE_PROJECT.md` 模板里的「基线版本」一行,
+把它删掉。
+
+- `resources/sources/SOURCE_PROJECT.md.template` —— 删除「基线版本」表格行;
+  「许可证」行补上 Output Exception 说明。
+- 本条目。
+
+**刻意保留(已确认)**: 工具名与 GitHub 链接**继续留在**这几个文件里
+(`SOURCE_PROJECT.md`、`build.sh`、`cpp/*`、`Loader.java`)。理由:
+
+1. 它们只随**输出目录**走,不进终端用户那份 JAR(上面扫描已证明);
+2. 客户本来就知道自己用的是哪个工具;
+3. 它们是 GPL 的**溯源记录**,也是 Output Exception 对用户可见的入口 ——
+   删掉会削弱合规性,却换不来实际的对抗收益。
+
 #### v1.4.6 - 2026-09-17 - 客户产物里的许可证声明改为「适用 Output Exception」
 
 **修改者**: xiaofanforfabric
