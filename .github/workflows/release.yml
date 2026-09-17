@@ -162,7 +162,7 @@ jobs:
           # native-obfuscator ${TAG}
 
           本仓库是 [radioegor146/native-obfuscator](https://github.com/radioegor146/native-obfuscator)
-          的扩展分支(Fork),基线版本 **v3.5.4r**,以 **GPL-3.0** 授权发布。
+          的扩展分支(Fork),基线版本 **v3.5.5r**,以 **GPL-3.0** 授权发布。
 
           ## 本 Fork 新增内容
 
@@ -171,6 +171,23 @@ jobs:
             上游只输出编译好的 Loader.class(黑盒),无法修改。
           - **行为完全兼容上游**:原有 JAR 输出流程未做任何改动。
           - **GPL-3.0 合规材料**:NOTICE、MODIFICATIONS.md、逐个源文件的变更声明。
+
+          ## 输出例外 (Output Exception)
+
+          自上游 v3.5.5r 起,\`LICENSE\` 中加入了 **Output Exception**:
+
+          > As a special exception, the copyright holders give unlimited permission
+          > to link, embed, compile and distribute the runtime code emitted by this
+          > tool -- including the native runtime (native_jvm), the loader, and the
+          > generated code fragments -- into your own programs, under terms of your
+          > choice, notwithstanding GPL-3.0 section 5(c).
+
+          工具**输出到用户目录里的** runtime 代码不再受 GPL-3.0 传染,可按你自己的条款
+          用于闭源商用程序;工具本身仍是完整的 GPL-3.0。被逐字复制进输出目录的 4 个
+          runtime 文件内也已写入该例外的声明注释,便于下游审计。
+
+          \`annotations\` 模块单独以 **LGPL-3.0** 授权(仅含编译期注解,无可执行
+          代码,运行时也不需要)。
 
           ## 构建信息
 
@@ -191,7 +208,9 @@ jobs:
 
           ## 许可证
 
-          本项目以 **GNU General Public License v3.0** 授权,与上游一致。
+          本项目以 **GNU General Public License v3.0** 授权,与上游一致,
+          并附带上述 **Output Exception**(工具输出的 runtime 代码)以及
+          \`annotations\` 模块的 **LGPL-3.0** 例外。
 
           本软件是上游项目的**派生作品**:上游原始作品版权归原作者及贡献者所有,
           本仓库保留其全部原始版权声明,并依据 GPL-3.0 §5(a) 标注了修改内容。
