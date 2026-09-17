@@ -194,6 +194,34 @@ bash scripts/repro-ki4.sh obfuscator/build/libs/obfuscator.jar   # 双插件 boo
 
 ### 已实施的修改
 
+#### v1.4.6 - 2026-09-17 - 客户产物里的许可证声明改为「适用 Output Exception」
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**问题**: `SOURCE_PROJECT.md.template` 的「许可证与归属」一节写着:
+
+> 修改与再分发需遵循 **GNU GPL v3.0**
+
+这在 Output Exception 合入上游(v3.5.5r / PR #102)之后**低估了客户的权利** ——
+例外明确允许把工具输出的 runtime 代码以任意条款链接、嵌入、编译与分发。
+这句话等于在吓自己的客户,方向恰好与例外相反。
+
+**改动**:
+
+- `resources/sources/SOURCE_PROJECT.md.template` —— 「许可证与归属」一节改为
+  **引用例外原文** + 指向上游 `LICENSE`,不再自行解释。措辞刻意保守:
+  - 直接贴 Output Exception 原文,让读者自己看范围
+  - 明确「例外只覆盖工具**输出**的代码;工具本身仍是完整 GPL-3.0」
+  - 加一段**范围说明**:例外原文写的是 "the runtime code emitted by this tool",
+    即 `java/` 与 `cpp/`;而 `SOURCE_PROJECT.md` 与 `build.sh` 是本 Fork 额外输出的
+    辅助文件,**不在该例外的字面范围内**。不做超出原文的授权声明 ——
+    否则等于给出自己兑现不了的承诺。将来若要明确授予,应先在上游把范围写清楚。
+- 本条目。
+
+**验证**: `./gradlew clean :obfuscator:shadowJar` 通过;实际混淆一个 JAR 后检查输出
+目录里的 `SOURCE_PROJECT.md`,新的许可证段落已正确写入。
+
 #### v1.4.5 - 2026-09-17 - 版本号改为跟随本 Fork 的发布标签
 
 **修改者**: xiaofanforfabric

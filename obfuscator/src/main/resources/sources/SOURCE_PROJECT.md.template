@@ -69,12 +69,33 @@ jar uf @JAR_NAME@ -C java/build @NATIVE_DIR@/Loader.class
 
 ## 许可证与归属
 
-本目录内的 `Loader.java` 与 `cpp/` 代码源自 **GPL 3.0** 授权的
+本目录内的 `Loader.java` 与 `cpp/` 代码源自 **GPL-3.0** 授权的
 [radioegor146/native-obfuscator](https://github.com/radioegor146/native-obfuscator)
 (上游原项目),并可能包含
 [xiaofanforfabric/native-obfuscator](https://github.com/xiaofanforfabric/native-obfuscator)
 (本 Fork)的修改。
 
+**适用 Output Exception。** 上游 `LICENSE` 中对工具**输出**的 runtime 代码设有例外条款,
+原文如下:
+
+> Output Exception
+>
+> As a special exception, the copyright holders of native-obfuscator give
+> unlimited permission to link, embed, compile and distribute the runtime code
+> emitted by this tool -- including the native runtime (native_jvm), the loader,
+> and the generated code fragments -- into your own programs, under terms of your
+> choice, notwithstanding GPL-3.0 section 5(c).
+>
+> This exception applies only to the code emitted by the tool. The tool itself
+> remains licensed under GPL-3.0 in full, without modification.
+
+例外全文见上游 `LICENSE`:
+<https://github.com/radioegor146/native-obfuscator/blob/master/LICENSE>
+
 - 上游原始作品版权归原作者及贡献者所有
-- 修改与再分发需遵循 **GNU GPL v3.0**
-- 分发二进制时需同时提供对应的完整源码
+- 例外只覆盖工具**输出**的代码;工具本身仍是完整的 GPL-3.0
+- 每条输出文件头部已带有该例外的声明注释,便于审计
+
+> **范围说明**:例外原文列明的是 "the runtime code emitted by this tool",
+> 即工具转译输出的 `java/` 与 `cpp/` 代码。本文件(`SOURCE_PROJECT.md`)与 `build.sh`
+> 是本 Fork 为便于重新编译而额外输出的辅助文件,用途是配合上述代码使用。

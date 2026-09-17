@@ -60,7 +60,7 @@ public class Main {
      * <p>上游原本填的是它自己的版本号(3.5.4r),而且发新版时常常忘记更新;
      * 本 Fork 改为跟随自己的标签,以便自动检测更新。</p>
      */
-    private static final String VERSION = "1.4.5";
+    private static final String VERSION = "1.4.6";
 
     @CommandLine.Command(name = "native-obfuscator", mixinStandardHelpOptions = true, version = "native-obfuscator " + VERSION,
             description = "Transpiles .jar file into .cpp files and generates output .jar file")
