@@ -29,7 +29,7 @@ public class ClInitSpecialMethodProcessor implements SpecialMethodProcessor {
         instructions.clear();
         instructions.add(new LdcInsnNode(context.classIndex));
         instructions.add(new LdcInsnNode(Type.getObjectType(context.clazz.name)));
-        instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, context.obfuscator.getNativeDir() + "/Loader",
+          instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, context.obfuscator.getLoaderClassName(),
                 "registerNativesForClass", "(ILjava/lang/Class;)V", false));
         instructions.add(new LdcInsnNode(Type.getObjectType(context.clazz.name)));
         instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC,

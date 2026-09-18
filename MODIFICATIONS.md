@@ -194,6 +194,51 @@ bash scripts/repro-ki4.sh obfuscator/build/libs/obfuscator.jar   # 双插件 boo
 
 ### 已实施的修改
 
+#### v1.4.8 - 2026-09-18 - 加载器类名与隐藏类名改为可指定(修多插件共存崩溃)
+
+**修改者**: xiaofanforfabric
+**本仓库**: https://github.com/xiaofanforfabric/native-obfuscator
+
+**背景**: 用本工具加壳的插件,**同一台服务器上装两个就会崩**:
+
+```
+java.lang.LinkageError: loader 'bootstrap' attempted duplicate class definition
+for native0.hidden.Hidden0
+```
+
+原因不在插件,而在转译产物本身:合成隐藏方法用的 `HiddenMethodsPool` 把生成的
+类固定放在 `native0.hidden.Hidden0`、`native0.hidden.Hidden1` … 而生成的
+`native_jvm_output.cpp` 用 `DefineClass(..., nullptr, ...)` 把它们和加载器类都
+定义进 **bootstrap 类加载器**。
+
+bootstrap 是 **JVM 全局唯一**的,不像 `PluginClassLoader` 那样每个插件一份 ——
+于是第二个插件去定义同名的 `native0.hidden.Hidden0` 时,直接 `LinkageError`。
+对 Minecraft 服务端这类「多个插件同进程」的场景,这是致命的。
+
+**改动**: 把这两个名字从写死改成参数,并让隐藏类不再占用固定的 `hidden` 子包。
+
+- `HiddenMethodsPool.java` —— 新增 `hiddenPrefix` 字段与两参构造;类名由
+  `native0/hidden/Hidden<N>` 改为 `<dir>/<prefix><N>`,前缀由调用方给。
+- `NativeObfuscator.java` —— 新增 `loaderSimpleName` / `hiddenSimpleName` 字段与
+  `getLoaderClassName()` / `setLoaderName()` / `setHiddenName()`;
+  `new HiddenMethodsPool(nativeDir, hiddenSimpleName)`。
+- `Main.java` —— 新增 `--loader-name` / `--hidden-name` 两个选项。
+- `source/MainSourceBuilder.java` —— `build(...)` 增加 `loaderName` 参数,模板里用
+  `loader_name` 变量。
+- `special/ClInitSpecialMethodProcessor.java` —— 改用 `getLoaderClassName()`,
+  不再拼写死的名字。
+- `resources/sources/native_jvm_output.cpp` —— `FindClass("$native_dir/$loader_name")`。
+- `resources/sources/rebuild_project.sh.template`、`SOURCE_PROJECT.md.template`
+  —— 同步为 `@LOADER_NAME@`。
+
+**兼容性**: 两个选项都有默认值,不传时行为与 v1.4.7 完全一致(仍是
+`native0/Loader` 与 `native0/hidden/Hidden<N>`),因此现有调用方不受影响。
+AntiHackerX 会为每份产物生成 **6 个随机的 8 字母名字**传进来,于是两份加固产物的
+加载器与隐藏类名互不相交,可以同进程共存。
+
+**验证**: 同一份输入连续加壳两次,产出的加载器名与隐藏类名**完全不重叠**;
+被改动的 8 个文件已随 `v1.4.8` 标签一起发布。
+
 #### v1.4.7 - 2026-09-17 - 输给客户的 SOURCE_PROJECT.md 不再报基线版本号
 
 **修改者**: xiaofanforfabric

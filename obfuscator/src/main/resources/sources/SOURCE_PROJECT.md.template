@@ -23,7 +23,7 @@
 ├── build.sh                   # 一键重新编译 + 打包脚本
 ├── java/
 │   └── @NATIVE_DIR@/
-│       └── Loader.java        # 加载器源码(可自由修改)
+│       └── @LOADER_NAME@.java        # 加载器源码(可自由修改)
 └── cpp/                       # 转译出的 C++ 原生代码
     ├── CMakeLists.txt
     ├── native_jvm.cpp/hpp
@@ -34,7 +34,7 @@
 
 ## 使用方式
 
-1. 修改 `java/@NATIVE_DIR@/Loader.java`,和/或修改 `cpp/` 下的任意 C++ 源码。
+1. 修改 `java/@NATIVE_DIR@/@LOADER_NAME@.java`,和/或修改 `cpp/` 下的任意 C++ 源码。
 2. 运行一键脚本重新编译并打包:
 
 ```bash
@@ -42,7 +42,7 @@ chmod +x build.sh
 ./build.sh
 ```
 
-脚本会依次:C++ 编译 → 计算原生库路径 → 编译 `Loader.java` → 更新输出 JAR。
+脚本会依次:C++ 编译 → 计算原生库路径 → 编译 `@LOADER_NAME@.java` → 更新输出 JAR。
 
 ## 手动编译(可选)
 
@@ -51,11 +51,11 @@ chmod +x build.sh
 cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
 cmake --build cpp/build -j
 
-# 编译 Loader.java
-javac -d java/build java/@NATIVE_DIR@/Loader.java
+# 编译 @LOADER_NAME@.java
+javac -d java/build java/@NATIVE_DIR@/@LOADER_NAME@.java
 
 # 更新 JAR(将原生库放入 @NATIVE_DIR@/<平台>-<类型>)
-jar uf @JAR_NAME@ -C java/build @NATIVE_DIR@/Loader.class
+jar uf @JAR_NAME@ -C java/build @NATIVE_DIR@/@LOADER_NAME@.class
 ```
 
 ## 原生库命名规则

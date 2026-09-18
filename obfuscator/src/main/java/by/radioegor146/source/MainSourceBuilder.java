@@ -31,12 +31,13 @@ public class MainSourceBuilder {
         ));
     }
 
-    public String build(String nativeDir, int classCount) {
+    public String build(String nativeDir, int classCount, String loaderName) {
         String template = Util.readResource("sources/native_jvm_output.cpp");
         return Util.dynamicFormat(template, Util.createMap(
                 "register_code", registerMethods,
                 "includes", includes,
                 "native_dir", nativeDir,
+                "loader_name", loaderName,
                 "class_count", Math.max(1, classCount)
         ));
     }

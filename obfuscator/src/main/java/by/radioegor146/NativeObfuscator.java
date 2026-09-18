@@ -133,6 +133,18 @@ public class NativeObfuscator {
     private String nativeDir;
 
     /**
+     * <b>Simple</b> name of the generated loader class. Defaults to {@code Loader}.
+     * <p>
+     * AntiHackerX passes a random name per pack: the loader's name is baked into the
+     * native library ({@code FindClass("<nativeDir>/<name>")} inside
+     * {@code JNI_OnLoad}), so it cannot be renamed afterwards - it has to be decided here.
+     */
+    private String loaderSimpleName = "Loader";
+
+    /** Simple-name prefix of the synthetic hidden classes ({@code Hidden} by default). */
+    private String hiddenSimpleName = "Hidden";
+
+    /**
      * Target class file <b>major</b> version for the classes written back to the output JAR.
      * <p>
      * A value of {@code <= 0} (the default) means <i>preserve the version read from the input
@@ -259,7 +271,7 @@ public class NativeObfuscator {
                 nativeDir = "native" + nativeDirId;
             }
 
-            hiddenMethodsPool = new HiddenMethodsPool(nativeDir + "/hidden");
+hiddenMethodsPool = new HiddenMethodsPool(nativeDir, hiddenSimpleName);
 
             Integer[] classIndexReference = new Integer[]{0};
 
@@ -473,7 +485,7 @@ public class NativeObfuscator {
                 }
             }
 
-            String loaderClassName = nativeDir + "/Loader";
+            String loaderClassName = getLoaderClassName();
 
             ClassNode loaderClass;
 
@@ -529,7 +541,7 @@ public class NativeObfuscator {
 
         Files.write(cppDir.resolve("string_pool.cpp"), stringPool.build().getBytes(StandardCharsets.UTF_8));
 
-        Files.write(cppDir.resolve("native_jvm_output.cpp"), mainSourceBuilder.build(nativeDir, currentClassId)
+        Files.write(cppDir.resolve("native_jvm_output.cpp"), mainSourceBuilder.build(nativeDir, currentClassId, loaderSimpleName)
                 .getBytes(StandardCharsets.UTF_8));
 
         Files.write(cppDir.resolve("CMakeLists.txt"), cMakeBuilder.build().getBytes(StandardCharsets.UTF_8));
@@ -563,6 +575,30 @@ public class NativeObfuscator {
         return nativeDir;
     }
 
+    /**
+     * Internal name of the generated loader class ({@code <nativeDir>/<loaderSimpleName>}).
+     * <p>
+     * Everything that has to call into the loader (the {@code <clinit>} stubs) must use
+     * this instead of concatenating {@code "/Loader"} itself.
+     */
+    public String getLoaderClassName() {
+        return nativeDir + "/" + loaderSimpleName;
+    }
+
+    public NativeObfuscator setLoaderName(String name) {
+        if (name != null && !name.isEmpty()) {
+            this.loaderSimpleName = name;
+        }
+        return this;
+    }
+
+    public NativeObfuscator setHiddenName(String name) {
+        if (name != null && !name.isEmpty()) {
+            this.hiddenSimpleName = name;
+        }
+        return this;
+    }
+
     public HiddenMethodsPool getHiddenMethodsPool() {
         return hiddenMethodsPool;
     }
@@ -592,22 +628,23 @@ public class NativeObfuscator {
         if (plainLibName == null) {
             loaderSource = Util.readResource("compiletime/LoaderUnpack.java.template")
                     .replace("package by.radioegor146.compiletime;", "package " + dotPackage + ";")
-                    .replace("LoaderUnpack", "Loader");
+                    .replace("LoaderUnpack", loaderSimpleName);
         } else {
             loaderSource = Util.readResource("compiletime/LoaderPlain.java.template")
                     .replace("package by.radioegor146.compiletime;", "package " + dotPackage + ";")
-                    .replace("LoaderPlain", "Loader")
+                    .replace("LoaderPlain", loaderSimpleName)
                     .replace("%LIB_NAME%", plainLibName);
         }
 
         Path packageDir = outputDir.resolve("java").resolve(nativeDir);
         Files.createDirectories(packageDir);
-        Files.write(packageDir.resolve("Loader.java"), loaderSource.getBytes(StandardCharsets.UTF_8));
+        Files.write(packageDir.resolve(loaderSimpleName + ".java"), loaderSource.getBytes(StandardCharsets.UTF_8));
 
         // --- 2. one-shot rebuild script ---
         String buildScript = Util.readResource("sources/rebuild_project.sh.template")
                 .replace("@JAR_NAME@", jarName)
                 .replace("@NATIVE_DIR@", nativeDir)
+                .replace("@LOADER_NAME@", loaderSimpleName)
                 .replace("@LOADER_PACKAGE@", dotPackage);
         Path buildScriptPath = outputDir.resolve("build.sh");
         Files.write(buildScriptPath, buildScript.getBytes(StandardCharsets.UTF_8));
@@ -621,9 +658,11 @@ public class NativeObfuscator {
         String readme = Util.readResource("sources/SOURCE_PROJECT.md.template")
                 .replace("@JAR_NAME@", jarName)
                 .replace("@NATIVE_DIR@", nativeDir)
+                .replace("@LOADER_NAME@", loaderSimpleName)
                 .replace("@LOADER_PACKAGE@", dotPackage);
         Files.write(outputDir.resolve("SOURCE_PROJECT.md"), readme.getBytes(StandardCharsets.UTF_8));
 
-        logger.info("Editable source project emitted to {} (java/{}/Loader.java)", outputDir, nativeDir);
+        logger.info("Editable source project emitted to {} (java/{}/{}.java)",
+                outputDir, nativeDir, loaderSimpleName);
     }
 }

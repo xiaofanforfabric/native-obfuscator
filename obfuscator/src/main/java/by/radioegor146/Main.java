@@ -60,7 +60,7 @@ public class Main {
      * <p>上游原本填的是它自己的版本号(3.5.4r),而且发新版时常常忘记更新;
      * 本 Fork 改为跟随自己的标签,以便自动检测更新。</p>
      */
-    private static final String VERSION = "1.4.7";
+    private static final String VERSION = "1.4.8";
 
     @CommandLine.Command(name = "native-obfuscator", mixinStandardHelpOptions = true, version = "native-obfuscator " + VERSION,
             description = "Transpiles .jar file into .cpp files and generates output .jar file")
@@ -86,6 +86,12 @@ public class Main {
 
         @CommandLine.Option(names = {"--custom-lib-dir"}, description = "Custom library directory for LoaderUnpack")
         private String customLibraryDirectory;
+
+        @CommandLine.Option(names = {"--loader-name"}, description = "Simple name of the generated loader class (default: Loader)")
+        private String loaderName;
+
+        @CommandLine.Option(names = {"--hidden-name"}, description = "Simple-name prefix of synthetic hidden classes (default: Hidden)")
+        private String hiddenName;
 
         @CommandLine.Option(names = {"-p", "--platform"}, defaultValue = "hotspot",
                 description = "Target platform: hotspot - standard standalone HotSpot JRE, std_java - java standard, android - for Android builds (w/o DefineClass)")
@@ -132,6 +138,8 @@ public class Main {
             if (classVersion != null) {
                 obfuscator.setClassVersion(classVersion);
             }
+            obfuscator.setLoaderName(loaderName);
+            obfuscator.setHiddenName(hiddenName);
 
             obfuscator.process(jarFile.toPath(), Paths.get(outputDirectory),
                     libs, blackList, whiteList, libraryName, customLibraryDirectory, platform, useAnnotations, generateDebugJar);

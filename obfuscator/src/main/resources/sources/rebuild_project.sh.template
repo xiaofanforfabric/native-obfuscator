@@ -11,10 +11,10 @@
 #
 # 用途:
 #   1. 编译 cpp/ 目录下的 C++ 原生库
-#   2. 编译 java/ 目录下(可自由修改)的 Loader.java
+#   2. 编译 java/ 目录下(可自由修改)的 @LOADER_NAME@.java
 #   3. 将二者重新打包回输出 JAR
 #
-# 修改 java/@NATIVE_DIR@/Loader.java 或 cpp/ 下的任意源码后,直接运行本脚本即可。
+# 修改 java/@NATIVE_DIR@/@LOADER_NAME@.java 或 cpp/ 下的任意源码后,直接运行本脚本即可。
 #
 set -euo pipefail
 
@@ -23,10 +23,11 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 # ---------------- 配置(由 native-obfuscator 生成,可自行修改) ----------------
 JAR_NAME="@JAR_NAME@"
 NATIVE_DIR="@NATIVE_DIR@"
+LOADER_NAME="@LOADER_NAME@"
 LOADER_PACKAGE="@LOADER_PACKAGE@"
 
 JAR_PATH="$ROOT/$JAR_NAME"
-JAVA_SRC="$ROOT/java/$NATIVE_DIR/Loader.java"
+JAVA_SRC="$ROOT/java/$NATIVE_DIR/$LOADER_NAME.java"
 CPP_DIR="$ROOT/cpp"
 
 if [ ! -f "$JAR_PATH" ]; then
@@ -64,7 +65,7 @@ esac
 LIB_ENTRY="$NATIVE_DIR/$PLATFORM_TYPE-$OS_TYPE"
 echo "      原生库条目: $LIB_ENTRY"
 
-echo "[3/4] 编译 Loader.java ..."
+echo "[3/4] 编译 $LOADER_NAME.java ..."
 BUILD_CLASSES="$ROOT/java/build"
 rm -rf "$BUILD_CLASSES"
 mkdir -p "$BUILD_CLASSES"
@@ -78,8 +79,8 @@ cp "$JAR_PATH" "$STAGE/out.jar"
 mkdir -p "$STAGE/lib/$NATIVE_DIR"
 cp "$LIB_FILE" "$STAGE/lib/$LIB_ENTRY"
 
-# 替换 JAR 中的 Loader.class
-jar uf "$STAGE/out.jar" -C "$BUILD_CLASSES" "$NATIVE_DIR/Loader.class"
+# 替换 JAR 中的 $LOADER_NAME.class
+jar uf "$STAGE/out.jar" -C "$BUILD_CLASSES" "$NATIVE_DIR/$LOADER_NAME.class"
 # 写入原生库
 jar uf "$STAGE/out.jar" -C "$STAGE/lib" "$LIB_ENTRY"
 

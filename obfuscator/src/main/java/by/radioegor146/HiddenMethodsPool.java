@@ -49,6 +49,16 @@ public class HiddenMethodsPool {
     private final String baseName;
 
     /**
+     * Simple-name prefix of the synthetic hidden classes.
+     * <p>
+     * Defaults to {@code Hidden} (upstream behaviour); AntiHackerX passes a random
+     * name so that two packed plugins can never collide: the hidden classes are
+     * defined into the <b>bootstrap</b> loader by {@code DefineClass(..., nullptr, ...)},
+     * so their names are global across the whole JVM.
+     */
+    private final String hiddenPrefix;
+
+    /**
      * Class file <b>major</b> version used for the synthetic hidden classes. It is raised to the
      * highest version seen among the transpiled classes, so a hidden class is never emitted with a
      * version lower than the classes it has to reference.
@@ -59,7 +69,12 @@ public class HiddenMethodsPool {
     private int classVersion = Opcodes.V1_8;
 
     public HiddenMethodsPool(String baseName) {
+        this(baseName, "Hidden");
+    }
+
+    public HiddenMethodsPool(String baseName, String hiddenPrefix) {
         this.baseName = baseName;
+        this.hiddenPrefix = hiddenPrefix == null || hiddenPrefix.isEmpty() ? "Hidden" : hiddenPrefix;
     }
 
     /**
@@ -120,7 +135,7 @@ public class HiddenMethodsPool {
             classNode = new ClassNode(Opcodes.ASM9);
             classNode.access = Opcodes.ACC_PUBLIC;
             classNode.version = classVersion;
-            classNode.name = baseName + "/Hidden" + classes.size();
+              classNode.name = baseName + "/" + hiddenPrefix + classes.size();
             classNode.superName = Type.getInternalName(Object.class);
             classes.add(classNode);
         }
